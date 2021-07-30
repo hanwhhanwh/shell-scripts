@@ -6,7 +6,7 @@
 # author : hbesthee@naver.com
 
 LOG_MM_AGENT=/share/logs/www.log
-AGENT_ROOT_DIR=/share/serivce/mm-agent
+AGENT_ROOT_DIR=/share/service/mm_agent
 AGENT_PORT=13000
 
 echo "========" | tee -a ${LOG_MM_AGENT}
@@ -17,5 +17,6 @@ echo "mm-agent 컨테이너 생성" | tee -a ${LOG_MM_AGENT}
 # docker run -d --restart=unless-stopped --name homepage \
 docker run -d --network host --restart=unless-stopped --name mm-agent \
 	-e SERVICE_PORT=${AGENT_PORT} \
+	-v /share/service/start-mm-agent.sh:/start-web.sh \
 	-v ${AGENT_ROOT_DIR}:/app/public \
 	hanwhhanwh/node:latest 2>&1 | tee -a ${LOG_MM_AGENT}
