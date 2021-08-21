@@ -5,9 +5,9 @@
 # date : 2021-08-21
 # author : hbesthee@naver.com
 
-REDMINE_LOGS=/share/logs/redmine.log
-REDMINE_FILES=/share/redmine/files
-REDMINE_LOGS=/share/redmine/logs
+REDMINE_LOGS=/home/logs/redmine.log
+REDMINE_FILES=/home/redmine/files
+REDMINE_LOGS=/home/redmine/logs
 REDMINE_PORT=3000
 REDMINE_DB_HOST=172.17.0.1
 REDMINE_DB_PORT=23306
