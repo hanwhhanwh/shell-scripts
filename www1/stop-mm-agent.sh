@@ -5,8 +5,8 @@
 # date : 2021-08-21
 # author : hbesthee@naver.com
 
-LOG_MM_AGENT=/share/logs/mm-agent.log
-AGENT_ROOT_DIR=/share/service/mm_agent
+LOG_MM_AGENT=/home/logs/mm-agent.log
+AGENT_ROOT_DIR=/home/service/mm_agent
 AGENT_PORT=13000
 
 echo "========" | tee -a ${LOG_MM_AGENT}
