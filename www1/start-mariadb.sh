@@ -8,7 +8,8 @@
 LOG_MARIADB=/home/logs/mariadb.log
 MARIADB_DATA_DIR=/home/mariadb
 MARIADB_PORT=23306
-MARIADB_TAG=10.5.12
+MARIADB_TAG=10.4.15
+#MARIADB_TAG=10.5.12
 
 echo "========" | tee -a ${LOG_MARIADB}
 echo "[$(date +%Y-%m-%d) $(date +%H:%M:%S)] $0 $@" | tee -a ${LOG_MARIADB}
