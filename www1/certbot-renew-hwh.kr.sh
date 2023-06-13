@@ -10,17 +10,17 @@ HOME_LETS_ENCRYPT='/share/letsencrypt'
 TARGET_SSL_DIR='/etc/haproxy/ssl'
 BACKUP_SSL_DIR='/share/backup/ssl'
 
-read -ps "https://www.gabia.com/ 을 브라우저로 실행하고 <ENTER>를 입력하세요 :"
+read -p "https://www.gabia.com/ 을 브라우저로 실행하고 <ENTER>를 입력하세요 :"
 
 docker run -it --rm --name certbot \
-	-v '${HOME_LETS_ENCRYPT}:/etc/letsencrypt' \
-	-v '${HOME_LETS_ENCRYPT}/lib:/var/lib/letsencrypt' \
-	-v '${HOME_LETS_ENCRYPT}/log:/var/log/letsencrypt' \
+	-v "${HOME_LETS_ENCRYPT}:/etc/letsencrypt" \
+	-v "${HOME_LETS_ENCRYPT}/lib:/var/lib/letsencrypt" \
+	-v "${HOME_LETS_ENCRYPT}/log:/var/log/letsencrypt" \
 	certbot/certbot certonly \
-	--manual --preferred-challenges dns -d '*.${TARGET_DOMAIN}' \
+	--manual --preferred-challenges dns -d "*.${TARGET_DOMAIN}" \
 	--server https://acme-v02.api.letsencrypt.org/directory
 
-read -ps "SSL 인증서 발급이 정상이면 <ENTER>를 입력하세요 :"
+read -p "SSL 인증서 발급이 정상이면 <ENTER>를 입력하세요 :"
 
 cd ${HOME_LETS_ENCRYPT}/live/${TARGET_DOMAIN}
 cat cert.pem chain.pem privkey.pem > ${TARGET_DOMAIN}.pem
