@@ -1,0 +1,25 @@
+[Adblock Plus 1.2]
+! Version: 20230808
+! Title: hbesthee AdBlockPlus filter list
+!
+aitimes.kr##.banner_box
+!
+!---- +19
+!avgosu.com##.row.at-row.at-banner.header
+avgosu.com##.row.at-row.at-banner
+hellven.net##.thumbnail
+||hellven.net/data/apms/banner/*
+||hellven.net/data/apms/background/*.jpg
+!
+!---- Hero warz
+solfors.com##.fc-ab-root
+solfors.com##.MuiBox-root.css-1h9341h
+hero-wars.fandom.com##.sc-eGRUor.ehWxcn
+!
+!---- torrent site
+||tosarang.net/img/*200.gif
+torrentpi75.com##.basic-post-gallery
+torrentpi75.com##.hd_pops
+torrentdia99.com##.pr_main_left_1
+torrentdia99.com##.pr_main_left_3
+torrentdia99.com##.pr_view
