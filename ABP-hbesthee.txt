@@ -1,11 +1,7 @@
 [Adblock Plus 1.2]
 ! Version: 20230814
 ! Title: hbesthee AdBlockPlus filter list
-! Last modified: 2023-08-14 08:20
 ! Expires: 1 days (update frequency)
-!
-! https://github.com/hanwhhanwh/shell-scripts/blob/main/ABP-hbesthee.txt
-! 
 !
 aitimes.kr##.banner_box
 !
