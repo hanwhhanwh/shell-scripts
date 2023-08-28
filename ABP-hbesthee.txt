@@ -7,7 +7,7 @@ aitimes.kr##.banner_box
 !
 !---- +19
 !avgosu.com##.row.at-row.at-banner.header
-avgosu.com##.row.at-row.at-banner
+avgosu1.com##.row.at-row.at-banner
 hellven.net##.thumbnail
 ||hellven.net/data/apms/banner/*
 ||hellven.net/data/apms/background/*.jpg
@@ -19,7 +19,7 @@ hero-wars.fandom.com##.sc-eGRUor.ehWxcn
 !
 !---- torrent site
 ||tosarang.net/img/*200.gif
-torrentpi76.com##.basic-post-gallery
-torrentpi76.com##.hd_pops
+torrentpi81.com##.basic-post-gallery
+torrentpi81.com##.hd_pops
 torrentqq270.com##.row.at-row.at-banner.header
 torrentqq270.com##.row-banner
