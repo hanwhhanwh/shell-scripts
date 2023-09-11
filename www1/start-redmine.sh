@@ -35,5 +35,5 @@ docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
 	-e REDMINE_DB_DATABASE=${REDMINE_DB_DATABASE} \
 	-v ${REDMINE_FILES}:/usr/src/redmine/files \
 	-v ${REDMINE_LOGS}:/usr/src/redmine/log \
-	-v ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb
+	-v ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb \
 	redmine:4.2.10-alpine 2>&1 | tee -a ${LOG_REDMINE}
