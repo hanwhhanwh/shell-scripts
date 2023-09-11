@@ -5,6 +5,7 @@
 # date : 2021-08-21
 # author : hbesthee@naver.com
 
+CONTAINER_NAME=redmine
 LOG_REDMINE=/home/logs/redmine.log
 REDMINE_FILES=/home/redmine/files
 REDMINE_LOGS=/home/redmine/logs
@@ -19,13 +20,13 @@ REDMINE_DB_DATABASE=redmine
 echo "========" | tee -a ${LOG_REDMINE}
 echo "[$(date +%Y-%m-%d) $(date +%H:%M:%S)] $0 $@" | tee -a ${LOG_REDMINE}
 
-echo "redmine 컨테이너 중지" | tee -a ${LOG_REDMINE}
-docker stop redmine ; docker rm redmine
+echo "${CONTAINER_NAME} 컨테이너 중지" | tee -a ${LOG_REDMINE}
+docker ps -q --filter "name=${CONTAINER_NAME}" | grep -q . && docker stop ${CONTAINER_NAME} && docker rm -fv ${CONTAINER_NAME} && echo "'${CONTAINER_NAME}' container stopped."
 
-echo "redmine 컨테이너 생성" | tee -a ${LOG_REDMINE}
+echo "${CONTAINER_NAME} 컨테이너 생성" | tee -a ${LOG_REDMINE}
 	# -e REDMINE_NO_DB_MIGRATE=1 \
 	# -p {REDMINE_PORT}:3000 \
-docker run -d --network host --restart=unless-stopped --name redmine \
+docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
 	-e REDMINE_DB_MYSQL=${REDMINE_DB_HOST} \
 	-e REDMINE_DB_PORT=${REDMINE_DB_PORT} \
 	-e REDMINE_DB_USERNAME=${REDMINE_DB_USERNAME} \
