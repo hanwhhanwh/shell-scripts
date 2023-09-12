@@ -30,5 +30,5 @@ echo "	backup redmine db" | tee -a ${LOG_BACKUP}
 
 
 echo "	delete old files" | tee -a ${LOG_BACKUP}
-find ${BACKUP_FOLDER} -type f -ctime 7 -and ! -name "*01.sql.gz" -exec rm -f {} \;
-find ${BACKUP_FOLDER} -type f -ctime 365 -exec rm -f {} \;
+find ${BACKUP_FOLDER} -type f -ctime +7 -name "*.gz" -and ! -name "*01.sql.gz" -exec rm -f {} \;
+find ${BACKUP_FOLDER} -type f -ctime +365 -name "*.gz" -exec rm -f {} \;
