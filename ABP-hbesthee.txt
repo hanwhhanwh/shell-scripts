@@ -1,5 +1,5 @@
 [Adblock Plus 1.2]
-! Version: 20231029
+! Version: 20231116
 ! Title: hbesthee AdBlockPlus filter list
 ! Expires: 1 days (update frequency)
 !
@@ -26,8 +26,8 @@ zdnet.co.kr###newsmediaBanner
 !
 !---- +19
 !avgosu.com##.row.at-row.at-banner.header
-avgosu2.com##.row.at-row.at-banner
-avgosu3.com##.row.at-row.at-banner
+avgosu4.com##.row.at-row.at-banner
+avgosu5.com##.row.at-row.at-banner
 hellven.net##.thumbnail
 ||hellven.net/data/apms/banner/*
 ||hellven.net/data/apms/background/*.jpg
@@ -39,10 +39,10 @@ hero-wars.fandom.com##.sc-eGRUor.ehWxcn
 !
 !---- torrent site
 ||tosarang.net/img/*200.gif
-torrentpi100.com##.basic-post-gallery
-torrentpi100.com##.hd_pops
-torrentpi101.com##.basic-post-gallery
-torrentpi101.com##.hd_pops
+torrentpi103.com##.basic-post-gallery
+torrentpi103.com##.hd_pops
+torrentpi104.com##.basic-post-gallery
+torrentpi104.com##.hd_pops
 torrentpi102.com##.basic-post-gallery
 torrentpi102.com##.hd_pops
 torrentqq279.com##.row.at-row.at-banner.header
