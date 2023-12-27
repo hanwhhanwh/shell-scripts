@@ -10,7 +10,10 @@ LOG_REDMINE=/home/logs/redmine.log
 REDMINE_FILES=/home/redmine/files
 REDMINE_LOG_CONFIG=/home/redmine/config/additional_environment.rb
 REDMINE_LOGS=/home/redmine/logs
+REDMINE_PLUGINS=/data/serv/redmine/plugins
+EXTERNAL_DATA=/data/serv/redmine/data
 REDMINE_PORT=3000
+REDMINE_TAG=5.1.0-alpine3.18
 REDMINE_DB_HOST=172.17.0.1
 REDMINE_DB_PORT=23306
 REDMINE_DB_USERNAME=redmine
@@ -35,5 +38,7 @@ docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
 	-e REDMINE_DB_DATABASE=${REDMINE_DB_DATABASE} \
 	-v ${REDMINE_FILES}:/usr/src/redmine/files \
 	-v ${REDMINE_LOGS}:/usr/src/redmine/log \
+	-v ${REDMINE_PLUGINS}:/usr/src/redmine/plugins \
+	-v ${EXTERNAL_DATA}:/usr/src/redmine/public/data \
 	-v ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb \
-	redmine:4.2.10-alpine 2>&1 | tee -a ${LOG_REDMINE}
+	redmine:${REDMINE_TAG} 2>&1 | tee -a ${LOG_REDMINE}
