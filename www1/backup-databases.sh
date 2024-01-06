@@ -5,7 +5,8 @@
 # date : 2023-09-11
 # author : hbesthee@naver.com
 
-LOG_BACKUP=/home/logs/backup-databases.log
+BACKUP_YEAR="$(date +%Y)"
+LOG_BACKUP="/home/logs/backup-databases-${BACKUP_YEAR}.log"
 MYSQLDUMP=/usr/bin/mysqldump
 BACKUP_FOLDER=/home/backup/mariadb
 BACKUP_DATE="$(date +%Y%m%d)"
