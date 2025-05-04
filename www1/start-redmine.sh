@@ -13,7 +13,8 @@ REDMINE_LOGS=/home/redmine/logs
 REDMINE_PLUGINS=/home/redmine/plugins
 EXTERNAL_DATA=/home/redmine/data
 REDMINE_PORT=3000
-REDMINE_TAG=5.1.1-alpine3.18
+#REDMINE_TAG=5.1.1-alpine3.18
+REDMINE_TAG=6.0.5-alpine3.21
 REDMINE_DB_HOST=172.17.0.1
 REDMINE_DB_PORT=23306
 REDMINE_DB_USERNAME=redmine
@@ -28,9 +29,9 @@ echo "${CONTAINER_NAME} 컨테이너 중지" | tee -a ${LOG_REDMINE}
 docker ps -q --filter "name=${CONTAINER_NAME}" | grep -q . && docker stop ${CONTAINER_NAME} && docker rm -fv ${CONTAINER_NAME} && echo "'${CONTAINER_NAME}' container stopped."
 
 echo "${CONTAINER_NAME} 컨테이너 생성" | tee -a ${LOG_REDMINE}
-	# -e REDMINE_NO_DB_MIGRATE=1 \
 	# -p {REDMINE_PORT}:3000 \
 docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
+	-e REDMINE_NO_DB_MIGRATE=1 \
 	-e REDMINE_DB_MYSQL=${REDMINE_DB_HOST} \
 	-e REDMINE_DB_PORT=${REDMINE_DB_PORT} \
 	-e REDMINE_DB_USERNAME=${REDMINE_DB_USERNAME} \
