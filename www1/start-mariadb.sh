@@ -25,4 +25,4 @@ docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
 	-v ${MARIADB_DATA_DIR}:/var/lib/mysql \
 	-e MYSQL_PORT=${MARIADB_PORT} \
 	-w / \
-	mariadb:${MARIADB_TAG} 2>&1 | tee -a ${LOG_MARIADB}
+	mariadb:${MARIADB_TAG} --port ${MARIADB_PORT} 2>&1 | tee -a ${LOG_MARIADB}
