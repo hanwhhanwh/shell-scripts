@@ -10,27 +10,27 @@
 // ==/UserScript==
 
 (function() {
-    'use strict';
+	'use strict';
 
 	function getClickButton() {
 		const div_element = document.querySelector('.layer_popup.type_no_points');
-        if (getComputedStyle(div_element).display === 'block') { // display:block 스타일인가? 화면에 표시되는 것인가?
+		if (getComputedStyle(div_element).display === 'block') { // display:block 스타일인가? 화면에 표시되는 것인가?
 			console.log(`found: ${div_element}`);
-            const element = div_element.querySelector('a.popup_link');
-            return element
-        }
-        return null
-    }
+			const element = div_element.querySelector('a.popup_link');
+			return element
+		}
+		return null
+	}
 
 	/**
 	 * DOM이 준비되면 .popup_link 요소를 찾아 클릭
 	 */
-    function clickPopupLink() {
+	function clickPopupLink() {
 		const element = getClickButton();
 		if (element) {
 			console.log('Auto-clicking:', element);
 			element.click();
-            alert('clicked');
+			alert('clicked');
 			return true;
 		} else {
 			console.log('.popup_link 요소가 존재하지 않음.');
@@ -48,10 +48,10 @@
 			console.log('동적으로 추가된 .popup_link 클릭!');
 			element.click();
 			observer.disconnect(); // 한 번 클릭 후 감시 중단
-            alert('clicked');
+			alert('clicked');
 		}
 	});
 	observer.observe(document.body, { childList: true, subtree: true });
 
-    clickPopupLink();
+	clickPopupLink();
 })();
