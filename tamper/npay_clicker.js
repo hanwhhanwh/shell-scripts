@@ -4,7 +4,8 @@
 // @version      2025-07-25
 // @description  네이버 클릭적립 이벤트에서 페이지 로딩 후 .popup_link 요소를 자동 클릭
 // @author       hbesthee@naver.com
-// @match        https://campaign2.naver.com/npay/*
+// @match        https://campaign2.naver.com/*
+// @run-at       document-idle   // DOMContentLoaded 후 실행
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=suto.co.kr
 // @grant        none
 // ==/UserScript==
@@ -30,7 +31,6 @@
 		if (element) {
 			console.log('Auto-clicking:', element);
 			element.click();
-			alert('clicked');
 			return true;
 		} else {
 			console.log('.popup_link 요소가 존재하지 않음.');
@@ -53,5 +53,8 @@
 	});
 	observer.observe(document.body, { childList: true, subtree: true });
 
-	clickPopupLink();
+	setTimeout(() => {
+		console.log('실행 시작');
+		clickPopupLink();
+	}, 1500);
 })();
