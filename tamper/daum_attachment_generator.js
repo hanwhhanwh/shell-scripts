@@ -75,8 +75,10 @@
 				return "";
 			}
 		}
-		const cookieHeader = `--header="Cookie: ${sessionStorage.getItem('cookie')}"`;
+		const cookieHeader = `--header="Cookie: ${sessionStorage.getItem('cookie').trim()}"`;
 		console.log(`cookieHeader=${cookieHeader}`)
+		// 현 페이지 주소를 Referer 헤더로 준비
+		const referrerHeader = `--header="Referer: ${document.location.href}"`;
 		// 임시 DOM 파서 생성
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(targetElement.innerHTML, 'text/html');
@@ -88,7 +90,7 @@
 			const textContent = linkElement.textContent ? linkElement.textContent.trim() : '';
 			let originalFilename = '';
 			let modifiedFilename = null;
-			let cookie = '';
+			let wget_headers = '';
 
 			// "https://attach" 또는 "download.asp"가 포함된 링크만 처리
 			if (url.startsWith('https://attach')) {
@@ -106,14 +108,14 @@
 				if (filenameMatch && filenameMatch[1]) {
 					originalFilename = filenameMatch[1].trim();
 					modifiedFilename = createModifiedFilename(originalFilename); // "download.asp" 링크는 파일명을 변경하지 않고 그대로 사용
-					cookie = cookieHeader;
+					wget_headers = `${cookieHeader} ${referrerHeader}`;
 				}
 			}
 
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
-				if (cookie !== '') {
-					wgetCommands.push(`wget ${cookie} "${url}" -O "${modifiedFilename}"`);
+				if (wget_headers !== '') {
+					wgetCommands.push(`wget ${wget_headers} "${url}" -O "${modifiedFilename}"`);
 				}
 				else {
 					wgetCommands.push(`wget "${url}" -O "${modifiedFilename}"`);
@@ -131,7 +133,7 @@
 	 * @param {string} contentId - wget 스크립트 생성을 위해 내용을 추출할 div의 ID
 	 */
 	function addWgetButtonToDiv(contentId = "read-content") {
-		const containerDiv = document.querySelector('div.text-center.panel-heading-local-title.text-bold');
+		const containerDiv = document.querySelector('div.pull-left.margin-bottom--8');
 		if (!containerDiv) {
 			console.error(`버튼을 추가할 컨테이너 div를 찾을 수 없습니다.`);
 			return;
@@ -139,18 +141,17 @@
 
 		// 버튼 엘리먼트 생성
 		const button = document.createElement('button');
-		button.textContent = 'Wget 스크립트 복사';
+		button.textContent = 'wget scripts';
 
 		// 버튼에 스타일 적용
 		button.style.cssText = `
 			background-color: #4CAF50;
 			color: white;
-			padding: 2px 20px;
+			padding: 4px 20px;
 			border: none;
 			border-radius: 5px;
 			cursor: pointer;
-			font-size: 10px;
-			margin-top: 2px;
+			font-size: 12px;
 			transition: background-color 0.3s ease;
 		`;
 
