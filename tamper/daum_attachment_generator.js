@@ -113,7 +113,7 @@
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
 				if (cookie !== '') {
-					wgetCommands.push(`wget "${cookie}" "${url}" -O "${modifiedFilename}"`);
+					wgetCommands.push(`wget ${cookie} "${url}" -O "${modifiedFilename}"`);
 				}
 				else {
 					wgetCommands.push(`wget "${url}" -O "${modifiedFilename}"`);
@@ -124,7 +124,68 @@
 		return wgetCommands.join(' ; \\\n');
 	}
 
-	setTimeout(() => {
-		console.log(generateWgetScriptFromElement());
-	}, 1500);
+
+	/**
+	 * 특정 div에 버튼을 추가하고, 버튼 클릭 시 wget 스크립트를 생성하여 콘솔에 출력합니다.
+	 * @param {string} containerId - 버튼을 추가할 div의 ID
+	 * @param {string} contentId - wget 스크립트 생성을 위해 내용을 추출할 div의 ID
+	 */
+	function addWgetButtonToDiv(contentId = "read-content") {
+		const containerDiv = document.querySelector('div.text-center.panel-heading-local-title.text-bold');
+		if (!containerDiv) {
+			console.error(`버튼을 추가할 컨테이너 div를 찾을 수 없습니다.`);
+			return;
+		}
+
+		// 버튼 엘리먼트 생성
+		const button = document.createElement('button');
+		button.textContent = 'Wget 스크립트 복사';
+
+		// 버튼에 스타일 적용
+		button.style.cssText = `
+			background-color: #4CAF50;
+			color: white;
+			padding: 2px 20px;
+			border: none;
+			border-radius: 5px;
+			cursor: pointer;
+			font-size: 10px;
+			margin-top: 2px;
+			transition: background-color 0.3s ease;
+		`;
+
+		// 마우스 오버 시 색상 변경
+		button.onmouseover = () => {
+			button.style.backgroundColor = '#45a049';
+		};
+		button.onmouseout = () => {
+			button.style.backgroundColor = '#4CAF50';
+		};
+
+		// 버튼 클릭 이벤트 리스너 추가
+		button.addEventListener('click', () => {
+			try {
+				const wgetScript = generateWgetScriptFromElement(contentId);
+				if (wgetScript) {
+					// 스크립트를 클립보드에 복사 (선택 사항)
+					navigator.clipboard.writeText(wgetScript)
+						.then(() => alert('Wget 스크립트가 클립보드에 복사되었습니다.'))
+						.catch(err => console.error('클립보드 복사 실패:', err));
+				} else {
+					console.log('생성할 wget 스크립트가 없습니다.');
+				}
+			} catch (e) {
+				console.error('스크립트 생성 중 오류 발생:', e);
+			}
+		});
+
+		// 컨테이너 div에 버튼 추가
+		containerDiv.appendChild(button);
+	}
+
+
+	addWgetButtonToDiv();
+	// setTimeout(() => {
+	// 	console.log(generateWgetScriptFromElement());
+	// }, 1500);
 })();
