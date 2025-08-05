@@ -22,6 +22,7 @@ echo "${CONTAINER_NAME} 컨테이너 생성" | tee -a ${LOG_MARIADB}
 #	-e MYSQL_ROOT_PASSWORD="root_pwd-2@2!"" \
 #	-p ${MARIADB_PORT}:3306 \
 docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
+	-e TZ=Asia/Seoul \
 	-v ${MARIADB_DATA_DIR}:/var/lib/mysql \
 	-e MYSQL_PORT=${MARIADB_PORT} \
 	-w / \

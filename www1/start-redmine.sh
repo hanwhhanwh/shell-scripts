@@ -32,6 +32,7 @@ docker ps -q --filter "name=${CONTAINER_NAME}" | grep -q . && docker stop ${CONT
 echo "${CONTAINER_NAME} 컨테이너 생성" | tee -a ${LOG_REDMINE}
 	# -p {REDMINE_PORT}:3000 \
 docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
+	-e TZ=Asia/Seoul \
 	-e REDMINE_NO_DB_MIGRATE=1 \
 	-e REDMINE_DB_MYSQL=${REDMINE_DB_HOST} \
 	-e REDMINE_DB_PORT=${REDMINE_DB_PORT} \
