@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         네이버페이 주문 상세내역 복사
 // @namespace    http://www.hwh.kr/
-// @version      1.0
+// @version      1.2
 // @description  네이버페이 주문 상세 페이지에서 주문 상세내역을 마크다운 형식으로 클립보드에 복사합니다.
 // @author       hbesthee@naver.com
 // @match        https://orders.pay.naver.com/order/status/*
 // @grant        GM_addStyle
 // @grant        GM_setClipboard
+// @run-at       document-end
 // ==/UserScript==
 
 (function() {
@@ -44,6 +45,26 @@
 
 
 	/**
+	 * 주문 전체 정보를 담을 클래스
+	 * @class
+	 */
+	class OrderInfo {
+		/**
+		 * @param {string} order_no - 주문번호
+		 * @param {string} shop_name - 상점명
+		 * @param {string} total_price - 결제금액
+		 * @param {OrderItem[]} items - 주문 상품 목록
+		 */
+		constructor(order_no, shop_name, total_price, items) {
+			this.order_no = order_no;
+			this.shop_name = shop_name;
+			this.total_price = total_price;
+			this.items = items;
+		}
+	}
+
+
+	/**
 	 * HTML 문서에서 특정 텍스트를 가진 버튼 요소를 찾습니다.
 	 * @param {string} buttonText - 찾고자 하는 버튼의 텍스트
 	 * @returns {HTMLButtonElement | null} - 찾은 버튼 요소 또는 찾지 못했을 경우 null
@@ -61,10 +82,9 @@
 
 	/**
 	 * HTML에서 주문 상세내역을 추출하는 함수
-	 * @returns {OrderItem[]} - 추출된 OrderItem 객체 목록
+	 * @returns {OrderInfo | null} - 추출된 OrderInfo 객체
 	 */
 	function extractOrderDetails() {
-		const orderItems = [];
 		const contentDiv = document.getElementById('content');
 
 		if (!contentDiv) {
@@ -72,114 +92,83 @@
 			return [];
 		}
 
+		const getElementText = (baseElement, selector, elementName) => {
+			const element = baseElement.querySelector(selector);
+			if (!element) {
+				console.warn(`[${elementName}] 요소를 찾을 수 없습니다. 공백으로 할당합니다.`);
+				return '';
+			}
+			return element.textContent.trim();
+		};
+
+		// 주문번호, 상점명, 결제금액 추출
+		const orderNo = getElementText(contentDiv, '.OrderSummary_summary_list__1T8uE .OrderSummary_summary_item__19Q8C:first-child dd', '주문번호');
+		const shopName = getElementText(contentDiv, '.StoreSummary_title__3R_2d', '상점명');
+		let totalPaymentPrice = '';
+		let paymentMethodText = '';
+
+		const summaryElements = contentDiv.querySelectorAll('dl, div[class^="SubSummary_item-detail"]');
+		let sale_price = '0원';
+		let used_points = '0원';
+		let delivery_fee = '0원';
+
+		summaryElements.forEach(container => {
+			const dtElement = container.querySelector('dt');
+			const ddElement = container.querySelector('dd');
+
+			if (!dtElement || !ddElement) return;
+
+			const dtText = dtElement.textContent.trim();
+			const ddText = ddElement.textContent.trim();
+
+			if (dtText.includes('쿠폰할인')) {
+				sale_price = ddText;
+			} else if (dtText.includes('네이버페이 포인트 사용')) {
+				used_points = ddText;
+			} else if (dtText.includes('배송비')) {
+				delivery_fee = ddText;
+			} else if (dtText.includes('카드 간편결제')) {
+				totalPaymentPrice = ddText;
+				paymentMethodText = dtElement.textContent.trim().replace('카드 간편결제', '').trim();
+			}
+		});
+
+		// 상품 정보 추출
+		const orderItems = [];
 		const productInfoDiv = contentDiv.querySelector('.ProductInfoSection_product-item__dipCB');
 
 		if (productInfoDiv) {
-			const getElementText = (selector, elementName) => {
-				const element = productInfoDiv.querySelector(selector);
-				if (!element) {
-					console.warn(`[상품정보] ${elementName} 요소를 찾을 수 없습니다.`);
-					return '';
-				}
-				return element.textContent.trim();
-			};
-
-			const getElementHref = (selector, elementName) => {
-				const element = productInfoDiv.querySelector(selector);
-				if (!element) {
-					console.warn(`[상품정보] ${elementName} 요소를 찾을 수 없습니다.`);
-					return '';
-				}
-				const href = element.href;
-				if (!href) {
-					console.warn(`[상품정보] ${elementName} 요소에 href 속성이 없습니다.`);
-					return '';
-				}
-				const urlParams = new URLSearchParams(href);
-				const retUrl = urlParams.get('retUrl');
-				return retUrl ? decodeURIComponent(retUrl) : '';
-			};
-
-			const item_name = getElementText('.ProductDetail_name__KnKyo', '상품명');
-			const url = getElementHref('.ProductDetail_article__J6Izl a', '상품 주소');
-			const countStr = getElementText('.ProductDetail_highlight__-5Etn', '수량');
+			const item_name = getElementText(productInfoDiv, '.ProductDetail_name__KnKyo', '상품명');
+			const urlEl = productInfoDiv.querySelector('.ProductDetail_article__J6Izl a');
+			const url = urlEl && urlEl.href ? new URLSearchParams(urlEl.href).get('retUrl') : '';
+			const countStr = getElementText(productInfoDiv, '.ProductDetail_highlight__-5Etn', '수량');
 			const count = parseInt(countStr.replace('개', ''), 10) || 0;
-			let single_price = getElementText('.ProductDetail_deleted__bSH1G', '단가');
-
-			// 결제 요약 정보 추출 (DL, DIV 모두 탐색)
-			let sale_price = '0원';
-			let used_points = '0원';
-			let delivery_fee = '0원';
-			let total_price = '0원';
-
-			const dlElements = contentDiv.querySelectorAll('dl');
-			dlElements.forEach(container => {
-				const dtElement = container.querySelector('dt');
-				const ddElement = container.querySelector('dd');
-
-				if (!dtElement || !ddElement) return;
-
-				const dtText = dtElement.textContent.trim();
-				const ddText = ddElement.textContent.trim();
-
-				if (dtText.includes('쿠폰할인')) {
-					sale_price = ddText;
-				} else if (dtText.includes('네이버페이 포인트 사용')) {
-					used_points = ddText;
-				} else if (dtText.includes('배송비')) {
-					delivery_fee = ddText;
-				} else if (dtText.includes('카드 간편결제')) {
-					total_price = ddText;
-				} else if (dtText.includes('상품금액')) {
-					single_price = ddText;
-				}
-			});
-
-			const summaryElements = contentDiv.querySelectorAll('div[class^="SubSummary_article"] > div[class^="SubSummary_item-detail"]');
-			summaryElements.forEach(container => {
-				const dtElement = container.querySelector('dt');
-				const ddElement = container.querySelector('dd');
-
-				if (!dtElement || !ddElement) return;
-
-				const dtText = dtElement.textContent.trim();
-				const ddText = ddElement.textContent.trim();
-
-				if (dtText.includes('쿠폰할인')) {
-					sale_price = ddText;
-				} else if (dtText.includes('네이버페이 포인트 사용')) {
-					used_points = ddText;
-				} else if (dtText.includes('배송비')) {
-					delivery_fee = ddText;
-				} else if (dtText.includes('카드 간편결제')) {
-					total_price = ddText;
-				} else if (dtText.includes('상품금액')) {
-					single_price = ddText;
-				}
-			});
+			const single_price = getElementText(productInfoDiv, '.ProductDetail_deleted__bSH1G', '단가');
+			
+			const decodedUrl = url ? decodeURIComponent(url) : '정보 없음';
 
 			orderItems.push(new OrderItem(
 				item_name || '정보 없음',
-				url || '정보 없음',
+				decodedUrl,
 				count,
 				single_price || '0원',
 				sale_price,
 				used_points,
 				delivery_fee,
-				total_price
+				totalPaymentPrice
 			));
 		}
 
-		return orderItems;
+		return new OrderInfo(orderNo, shopName, totalPaymentPrice, orderItems);
 	}
 
 
 	/**
-	 * OrderItem 목록을 마크다운 문자열로 변환하는 함수
-	 * @param {OrderItem[]} items - OrderItem 객체 목록
+	 * OrderInfo 객체를 마크다운 문자열로 변환하는 함수
+	 * @param {OrderInfo} orderInfo - OrderInfo 객체
 	 * @returns {string} - 마크다운 형식의 문자열
 	 */
-	function generateMarkdown(items) {
+	function generateMarkdown(orderInfo) {
 		const date = new Date();
 		const year = date.getFullYear();
 		const month = String(date.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작하므로 1을 더합니다.
@@ -188,16 +177,14 @@
 
 		let markdownString = "\n\n";
 
-		if (items.length === 0) {
+		if (orderInfo.items.length === 0) {
 			console.log('주문 상세내역을 찾을 수 없습니다.');
 			return;
 		} else {
-			let order_no = '';
-			let total_price = 0;
-			markdownString += `## ${formattedDate} : 네이버샵() : ${total_price} (네이버페이 ; 신한더모아) ; \n\n`;
+			markdownString += `## ${formattedDate} : 네이버샵(${orderInfo.shop_name}) : ${orderInfo.total_price} (네이버페이 ; 신한더모아) ; \n\n`;
 			markdownString += `|_. 주문번호 |_. 상품 |_. 단가 |_. 수량 |_. 할인금액 |_. 포인트 |_. 배송비 |_. 결제금액 |\n`;
-			items.forEach((item, index) => {
-				markdownString += `| "${order_no}":https://order.pay.naver.com/orderStatus/${order_no} `;
+			orderInfo.items.forEach(item => {
+				markdownString += `| [${orderInfo.order_no}](https://order.pay.naver.com/orderStatus/${orderInfo.order_no}) `;
 				markdownString += `| [${item.item_name}](${item.url}) `;
 				markdownString += `| ${item.single_price} `;
 				markdownString += `| ${item.count} `;
