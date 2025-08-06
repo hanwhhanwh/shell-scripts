@@ -35,9 +35,9 @@
 		const extensionMatch = filename.match(/\.([0-9a-z]+)(?:[\?#]|$)/i);
 		const extension = extensionMatch ? `.${extensionMatch[1]}` : '';
 
-		let newFilename = baseName;
+		let newFilename = baseName.toUpperCase();
 
-		if (filename.includes("Reducing_Mosaic")) {
+		if (filename.includes("Reducing_Mosaic") || filename.includes(".uncen")) {
 			newFilename += "-HU";
 		}
 
