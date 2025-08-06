@@ -2,7 +2,7 @@
 // @name         네이버페이 주문 상세내역 복사
 // @namespace    http://www.hwh.kr/
 // @version      1.0
-// @description  네이버페이 주문 상세 페이지에서 주문 내역을 마크다운으로 복사하는 버튼을 추가합니다.
+// @description  네이버페이 주문 상세 페이지에서 주문 상세내역을 마크다운 형식으로 클립보드에 복사합니다.
 // @author       hbesthee@naver.com
 // @match        https://orders.pay.naver.com/order/status/*
 // @grant        GM_addStyle
@@ -16,20 +16,9 @@
 	'use strict';
 
 	/**
-	 * @description HTML 문서에서 특정 텍스트를 가진 버튼 요소를 찾습니다.
-	 * @param {string} buttonText - 찾고자 하는 버튼의 텍스트
-	 * @returns {HTMLButtonElement | null} - 찾은 버튼 요소 또는 찾지 못했을 경우 null
+	 * 주문 상품 정보를 담을 클래스
+	 * @class
 	 */
-	function findButton(buttonText) {
-		const buttons = document.querySelectorAll('button');
-		for (const button of buttons) {
-			if (button.textContent.trim() === buttonText) {
-				return button;
-			}
-		}
-		return null;
-	}
-
 	class OrderItem {
 		constructor(item_name, url, count, single_price, sale_price, used_points, delivery_fee, total_price) {
 			this.item_name = item_name;
@@ -43,6 +32,28 @@
 		}
 	}
 
+
+	/**
+	 * 특정 텍스트를 가진 버튼 요소를 찾습니다.
+	 * @param {string} buttonText - 찾고자 하는 버튼의 텍스트
+	 * @returns {HTMLButtonElement | null} - 찾은 버튼 요소 또는 찾지 못했을 경우 null
+	 */
+	function findButton(buttonText) {
+		const buttons = document.querySelectorAll('button');
+		for (const button of buttons) {
+			if (button.textContent.trim() === buttonText) {
+				return button;
+			}
+		}
+		return null;
+	}
+
+
+	/**
+	 * HTML에서 주문 상세내역을 추출하는 함수
+	 * @param {string} html - 전체 HTML 소스
+	 * @returns {OrderItem[]} - 추출된 OrderItem 객체 목록
+	 */
 	function extractOrderDetails(html) {
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(html, 'text/html');
@@ -54,6 +65,7 @@
 			return [];
 		}
 
+		// 개별 상품 정보 추출 (div 기반)
 		const productInfoDiv = contentDiv.querySelector('.ProductInfoSection_product-item__dipCB');
 		if (productInfoDiv) {
 			const item_name = productInfoDiv.querySelector('.ProductDetail_name__KnKyo').textContent.trim();
@@ -61,16 +73,18 @@
 			const url = urlEl && urlEl.href ? new URLSearchParams(urlEl.href).get('retUrl') : '정보 없음';
 			const count = parseInt(productInfoDiv.querySelector('.ProductDetail_highlight__-5Etn').textContent, 10);
 			const single_price = productInfoDiv.querySelector('.ProductDetail_deleted__bSH1G').textContent.trim();
+			const decodedUrl = url !== '정보 없음' ? decodeURIComponent(url) : url;
 
+			// 요약 정보 추출 (DL 및 Summary_item-detail 클래스 기반)
 			let sale_price = '0원';
 			let used_points = '0원';
 			let delivery_fee = '0원';
 			let total_price = '0원';
 
-			const dls = contentDiv.querySelectorAll('dl');
-			dls.forEach(dl => {
-				const dtText = dl.querySelector('dt span')?.textContent.trim();
-				const ddText = dl.querySelector('dd')?.textContent.trim();
+			const summaryItems = contentDiv.querySelectorAll('dl, [class*="Summary_item-detail"]');
+			summaryItems.forEach(item => {
+				const dtText = item.querySelector('dt span')?.textContent.trim() || item.querySelector('dt')?.textContent.trim();
+				const ddText = item.querySelector('dd')?.textContent.trim();
 				if (!dtText || !ddText) return;
 
 				if (dtText.includes('쿠폰할인')) {
@@ -84,12 +98,18 @@
 				}
 			});
 
-			const decodedUrl = url !== '정보 없음' ? decodeURIComponent(url) : url;
 			orderItems.push(new OrderItem(item_name, decodedUrl, count, single_price, sale_price, used_points, delivery_fee, total_price));
 		}
+
 		return orderItems;
 	}
 
+
+	/**
+	 * OrderItem 목록을 마크다운 문자열로 변환하는 함수
+	 * @param {OrderItem[]} items - OrderItem 객체 목록
+	 * @returns {string} - 마크다운 형식의 문자열
+	 */
 	function generateMarkdown(items) {
 		let markdownString = '## 주문 상세내역 요약\n\n';
 		markdownString += '------------------\n\n';
@@ -111,47 +131,50 @@
 		return markdownString;
 	}
 
-	function createCopyButton(receiptButton) {
-		const copyButton = document.createElement('button');
-		copyButton.textContent = '복사';
-		copyButton.style.cssText = `
-			font-size: 16px;
-			font-weight: 700;
-			padding: 10px 15px;
-			border-radius: 6px;
-			background-color: #03c75a;
-			color: #fff;
-			border: none;
-			cursor: pointer;
-			margin-left: 10px;
-		`;
 
-		copyButton.addEventListener('click', async () => {
-			const contentDiv = document.getElementById('content');
-			if (contentDiv) {
-				const orderDetails = extractOrderDetails(contentDiv.outerHTML);
+	/**
+	 * 페이지 로드 후 실행되는 메인 함수
+	 */
+	function main() {
+		// "영수증" 버튼 찾기
+		const receiptButton = findButton('영수증');
+
+		if (receiptButton) {
+			// "복사" 버튼 생성 및 스타일 복제
+			const copyButton = receiptButton.cloneNode(true);
+			copyButton.textContent = '복사';
+			copyButton.style.marginLeft = '8px'; // 영수증 버튼과의 간격 조정
+
+			// 클릭 이벤트 리스너 추가
+			copyButton.addEventListener('click', () => {
+				const htmlSource = document.getElementById('content')?.outerHTML || '';
+				if (!htmlSource) {
+					console.error('HTML 소스를 찾을 수 없습니다. "content" ID를 가진 요소가 있는지 확인해주세요.');
+					return;
+				}
+
+				const orderDetails = extractOrderDetails(htmlSource);
 				if (orderDetails.length > 0) {
 					const markdownOutput = generateMarkdown(orderDetails);
-					GM_setClipboard(markdownOutput, 'text');
-					alert('주문 상세내역이 클립보드에 복사되었습니다.');
-				} else {
-					alert('주문 상세내역을 찾을 수 없습니다.');
-				}
-			} else {
-				alert('HTML 소스에서 "content" 요소를 찾을 수 없습니다.');
-			}
-		});
 
-		receiptButton.parentNode.insertBefore(copyButton, receiptButton.nextSibling);
+					// 클립보드에 복사
+					GM_setClipboard(markdownOutput, 'text/plain');
+					alert('주문 상세내역이 클립보드에 복사되었습니다.');
+					console.log(markdownOutput);
+				}
+			});
+
+			// "영수증" 버튼 뒤에 "복사" 버튼 삽입
+			receiptButton.parentNode.insertBefore(copyButton, receiptButton.nextSibling);
+			console.log('복사 버튼이 추가되었습니다.');
+		} else {
+			console.log('영수증 버튼을 찾을 수 없습니다.');
+		}
 	}
 
+	// window.addEventListener('load', main);
+
 	setTimeout(() => {
-		const receiptButton = findButton('영수증');
-		if (receiptButton) {
-			createCopyButton(receiptButton);
-			console.log('네이버페이 주문 상세내역 복사 버튼이 추가되었습니다.');
-		} else {
-			console.log('영수증 버튼을 찾을 수 없습니다. 복사 버튼을 추가하지 않습니다.');
-		}
+		main();
 	}, 1000);
 })();
