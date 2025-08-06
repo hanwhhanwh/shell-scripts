@@ -104,7 +104,7 @@
 			const url = getElementHref('.ProductDetail_article__J6Izl a', '상품 주소');
 			const countStr = getElementText('.ProductDetail_highlight__-5Etn', '수량');
 			const count = parseInt(countStr.replace('개', ''), 10) || 0;
-			const single_price = getElementText('.ProductDetail_deleted__bSH1G', '단가');
+			let single_price = getElementText('.ProductDetail_deleted__bSH1G', '단가');
 
 			// 결제 요약 정보 추출 (DL, DIV 모두 탐색)
 			let sale_price = '0원';
@@ -112,8 +112,30 @@
 			let delivery_fee = '0원';
 			let total_price = '0원';
 
-			const summaryElements = contentDiv.querySelectorAll('dl, div[class^="Summary_item-detail"]');
+			const dlElements = contentDiv.querySelectorAll('dl');
+			dlElements.forEach(container => {
+				const dtElement = container.querySelector('dt');
+				const ddElement = container.querySelector('dd');
 
+				if (!dtElement || !ddElement) return;
+
+				const dtText = dtElement.textContent.trim();
+				const ddText = ddElement.textContent.trim();
+
+				if (dtText.includes('쿠폰할인')) {
+					sale_price = ddText;
+				} else if (dtText.includes('네이버페이 포인트 사용')) {
+					used_points = ddText;
+				} else if (dtText.includes('배송비')) {
+					delivery_fee = ddText;
+				} else if (dtText.includes('카드 간편결제')) {
+					total_price = ddText;
+				} else if (dtText.includes('상품금액')) {
+					single_price = ddText;
+				}
+			});
+
+			const summaryElements = contentDiv.querySelectorAll('div[class^="SubSummary_article"] > div[class^="SubSummary_item-detail"]');
 			summaryElements.forEach(container => {
 				const dtElement = container.querySelector('dt');
 				const ddElement = container.querySelector('dd');
@@ -132,7 +154,7 @@
 				} else if (dtText.includes('카드 간편결제')) {
 					total_price = ddText;
 				} else if (dtText.includes('상품금액')) {
-					// 상품금액은 single_price로 이미 추출했으므로, 필요한 경우에만 추가로 처리
+					single_price = ddText;
 				}
 			});
 
@@ -158,26 +180,34 @@
 	 * @returns {string} - 마크다운 형식의 문자열
 	 */
 	function generateMarkdown(items) {
-		let markdownString = '## 주문 상세내역 요약\n\n';
-		markdownString += '------------------\n\n';
+		const date = new Date();
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작하므로 1을 더합니다.
+		const day = String(date.getDate()).padStart(2, '0');
+		const formattedDate = `${year}-${month}-${day}`;
+
+		let markdownString = "\n\n";
 
 		if (items.length === 0) {
-			markdownString += '주문 상세내역을 찾을 수 없습니다.\n\n';
+			console.log('주문 상세내역을 찾을 수 없습니다.');
+			return;
 		} else {
+			let order_no = '';
+			let total_price = 0;
+			markdownString += `## ${formattedDate} : 네이버샵() : ${total_price} (네이버페이 ; 신한더모아) ; \n\n`;
+			markdownString += `|_. 주문번호 |_. 상품 |_. 단가 |_. 수량 |_. 할인금액 |_. 포인트 |_. 배송비 |_. 결제금액 |\n`;
 			items.forEach((item, index) => {
-				markdownString += `### 상품 ${index + 1}\n\n`;
-				markdownString += `- 상품명: **[${item.item_name}](${item.url})**\n`;
-				markdownString += `- 수량: ${item.count}개\n`;
-				markdownString += `- 상품금액: ${item.single_price}\n`;
-				markdownString += `- 쿠폰할인: ${item.sale_price}\n`;
-				markdownString += `- 사용 포인트: ${item.used_points}\n`;
-				markdownString += `- 배송비: ${item.delivery_fee}\n`;
-				markdownString += `- 최종 결제 금액: ${item.total_price}\n\n`;
+				markdownString += `| "${order_no}":https://order.pay.naver.com/orderStatus/${order_no} `;
+				markdownString += `| [${item.item_name}](${item.url}) `;
+				markdownString += `| ${item.single_price} `;
+				markdownString += `| ${item.count} `;
+				markdownString += `| ${item.sale_price} `;
+				markdownString += `| ${item.used_points} `;
+				markdownString += `| ${item.delivery_fee} `;
+				markdownString += `| ${item.total_price} `;
+				markdownString += ` |\n`;
 			});
 		}
-
-		markdownString += '------------------\n\n';
-		markdownString += '※ 위 내용은 페이지에서 추출되었습니다.';
 
 		return markdownString;
 	}
