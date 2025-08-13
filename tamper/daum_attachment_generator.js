@@ -1,18 +1,22 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      2025-08-05
+// @version      v1.1.4
+// @date         2025-08-13
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
 // @match        https://*/newboard/*
 // @run-at       document-end
-// @grant        none
+// @grant        GM_addStyle
+// @grant        GM_setClipboard
 // ==/UserScript==
 
 (function() {
 	/** Start script */
 	console.log('%cStart ' + GM_info.script.name + ', v' + GM_info.script.version + ' by ' + GM_info.script.author, 'color: red');
 
+	const DAUM_BASE = 'https://attach.mail.daum.net/bigfile/v1/urls';
+	const YA_BASE = 'https://www.ya-moon.com/newboard/yamoonboard/admin-board/download.asp?fullboardname=';
 	'use strict';
 
 
@@ -39,6 +43,9 @@
 
 		if (filename.includes("Reducing_Mosaic") || filename.includes(".uncen")) {
 			newFilename += "-HU";
+		}
+		if ( filename.includes(".korsub") ) {
+			newFilename += "-S";
 		}
 
 		// 최종 파일명에 확장자 추가
@@ -115,15 +122,17 @@
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
 				if (wget_headers !== '') {
-					wgetCommands.push(`wget ${wget_headers} "${url}" -O "${modifiedFilename}"`);
+					wgetCommands.push(`curl -o "${modifiedFilename}" -K "\${HOME}/.conf/down.conf" -sS "${url.replace(YA_BASE, '\${YA_BASE}')}"`);
 				}
 				else {
-					wgetCommands.push(`wget "${url}" -O "${modifiedFilename}"`);
+					wgetCommands.push(`wget -O "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
 				}
 			}
 		});
 
-		return wgetCommands.join(' ; \\\n');
+		return `export DAUM_BASE="${DAUM_BASE}" ; \\\n`
+					+ `export YA_BASE="${YA_BASE}" ; \\\n`
+					+ wgetCommands.join(' ; \\\n');
 	}
 
 
@@ -169,6 +178,7 @@
 				const wgetScript = generateWgetScriptFromElement(contentId);
 				if (wgetScript) {
 					// 스크립트를 클립보드에 복사 (선택 사항)
+					// GM_setClipboard(wgetScript)
 					navigator.clipboard.writeText(wgetScript)
 						.then(() => alert('Wget 스크립트가 클립보드에 복사되었습니다.'))
 						.catch(err => console.error('클립보드 복사 실패:', err));
