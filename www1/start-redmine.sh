@@ -46,3 +46,4 @@ docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
 	-v ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb \
 	-v ${REDMINE_DB_CONFIG}:/usr/src/redmine/config/database.yml \
 	redmine:${REDMINE_TAG} 2>&1 | tee -a ${LOG_REDMINE}
+	
