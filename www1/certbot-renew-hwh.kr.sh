@@ -6,9 +6,9 @@
 # author : hbesthee@naver.com
 
 TARGET_DOMAIN='hwh.kr'
-HOME_LETS_ENCRYPT='/share/letsencrypt'
-TARGET_SSL_DIR='/etc/haproxy/ssl'
-BACKUP_SSL_DIR='/share/backup/ssl'
+HOME_LETS_ENCRYPT='/home/service/letsencrypt'
+TARGET_SSL_DIR='/home/haproxy/certs'
+BACKUP_SSL_DIR='/home/backup/certs'
 
 read -p "https://www.gabia.com/ 을 브라우저로 실행하고 <ENTER>를 입력하세요 :"
 
@@ -27,4 +27,6 @@ cat cert.pem chain.pem privkey.pem > ${TARGET_DOMAIN}.pem
 rm -f ${TARGET_SSL_DIR}/${TARGET_DOMAIN}.pem
 cp ${TARGET_DOMAIN}.pem ${TARGET_SSL_DIR} # 새로운 SSL 인증서 적용
 mv ${TARGET_DOMAIN}.pem ${BACKUP_SSL_DIR}/${TARGET_DOMAIN}.pem-$(date +%Y%m%d) # 새로운 인증서 백업
-systemctl reload haproxy # HAProxy 새시작으로 새로운 SSL 인증서가 웹 서비스에 반영되도록 함
+# HAProxy 새시작으로 새로운 SSL 인증서가 웹 서비스에 반영되도록 함
+#systemctl reload haproxy
+docker kill -s HUP haproxy

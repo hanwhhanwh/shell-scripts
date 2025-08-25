@@ -1,0 +1,17 @@
+#domainname  backendname
+dev-www.hunature.net		default
+dev-qr.hunature.net		qr_user
+dev-qrer.hunature.net		qr_buyer
+dev-qradmin.hunature.net	qr_manager
+dev-acnt.hunature.net		acnt
+dev-ace.hunature.net		ace
+dev-weapi.hunature.net		weapi
+flpd.hunature.net		flpd
+w.hunature.net			wiki
+wiki.hunature.net		wiki
+
+dev.dtsewoon.io			dtsewoon
+dtsewoon.io			dtsewoon
+www.dtsewoon.io			dtsewoon
+file.dtsewoon.io		dtsewoon
+dts.smiledoctor.kr		dtsewoon
