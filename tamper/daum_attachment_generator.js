@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.4
+// @version      v1.1.5
 // @date         2025-08-13
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
@@ -125,7 +125,8 @@
 					wgetCommands.push(`curl -o "${modifiedFilename}" -K "\${HOME}/.conf/down.conf" -sS "${url.replace(YA_BASE, '\${YA_BASE}')}"`);
 				}
 				else {
-					wgetCommands.push(`wget -O "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
+					// wgetCommands.push(`wget -O "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
+					wgetCommands.push(`curl -o "${modifiedFilename}" -K "\${HOME}/.conf/daum.conf" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
 				}
 			}
 		});
@@ -150,7 +151,7 @@
 
 		// 버튼 엘리먼트 생성
 		const button = document.createElement('button');
-		button.textContent = 'wget scripts';
+		button.textContent = 'CURL scripts';
 
 		// 버튼에 스타일 적용
 		button.style.cssText = `
