@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.6
+// @version      v1.1.7
 // @date         2025-08-13
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
@@ -103,6 +103,11 @@
 					isKakao = false;
 				}
 			}
+			if (isFilter == true) {
+				if (modifiedFilename == null || modifiedFilename === '') {
+					modifiedFilename = originalFilename;
+				}
+			}
 
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
@@ -180,10 +185,10 @@
 
 
 	/**
-	 * 특정 div에 버튼을 추가하고, 버튼 클릭 시 모든 다운로드 스크립트를 생성하여 클립보드에 복사합니다.
+	 * 특정 div에 버튼을 추가하고, 버튼 클릭 시 원래의 파일명들로 다운로드 스크립트를 생성하여 클립보드에 복사합니다.
 	 * @param {string} contentId - 다운로드 스크립트 생성을 위해 내용을 추출할 div의 ID
 	 */
-	function addAllCopyButtonToDiv(contentId="read-content") {
+	function addOriginalCopyButtonToDiv(contentId="read-content") {
 		const containerDiv = document.querySelector('div.pull-left.margin-bottom--8');
 		if (!containerDiv) {
 			console.error(`버튼을 추가할 컨테이너 div를 찾을 수 없습니다.`);
@@ -192,7 +197,7 @@
 
 		// 버튼 엘리먼트 생성
 		const button = document.createElement('button');
-		button.textContent = 'All Copy';
+		button.textContent = 'Original Copy';
 
 		// 버튼에 스타일 적용
 		button.style.cssText = `
@@ -238,5 +243,5 @@
 
 
 	addFilterdCopyButtonToDiv();
-	addAllCopyButtonToDiv();
+	addOriginalCopyButtonToDiv();
 })();
