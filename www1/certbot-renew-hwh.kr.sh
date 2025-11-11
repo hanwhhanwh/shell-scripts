@@ -7,7 +7,7 @@
 
 TARGET_DOMAIN='hwh.kr'
 HOME_LETS_ENCRYPT='/home/service/letsencrypt'
-TARGET_SSL_DIR='/home/haproxy/certs'
+TARGET_SSL_DIR='/home/haproxy/conf/certs'
 BACKUP_SSL_DIR='/home/backup/certs'
 
 read -p "https://www.gabia.com/ 을 브라우저로 실행하고 <ENTER>를 입력하세요 :"
@@ -25,7 +25,7 @@ read -p "SSL 인증서 발급이 정상이면 <ENTER>를 입력하세요 :"
 cd ${HOME_LETS_ENCRYPT}/live/${TARGET_DOMAIN}
 cat cert.pem chain.pem privkey.pem > ${TARGET_DOMAIN}.pem
 rm -f ${TARGET_SSL_DIR}/${TARGET_DOMAIN}.pem
-cp ${TARGET_DOMAIN}.pem ${TARGET_SSL_DIR} # 새로운 SSL 인증서 적용
+cp ${TARGET_DOMAIN}.pem ${TARGET_SSL_DIR}/ # 새로운 SSL 인증서 적용
 mv ${TARGET_DOMAIN}.pem ${BACKUP_SSL_DIR}/${TARGET_DOMAIN}.pem-$(date +%Y%m%d) # 새로운 인증서 백업
 # HAProxy 새시작으로 새로운 SSL 인증서가 웹 서비스에 반영되도록 함
 #systemctl reload haproxy
