@@ -225,7 +225,7 @@
 			markdownString += `|\n\n| 번호 | 상품 | 단가 | 수량 |\n`;
 			markdownString += `|:---:|---|---:|---:|\n`;
 			orderInfo.items.forEach((item, index) => {
-				markdownString += `| ${index} `;
+				markdownString += `| ${index + 1} `;
 				markdownString += `| [${item.item_name}](${item.url}) `;
 				markdownString += `| ${item.single_price} `;
 				markdownString += `| ${item.count} `;
