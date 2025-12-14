@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
-// @version      v1.0.0
+// @version      v1.1.0
 // @date         2025-11-18
 // @description  첨부된 소설의 점수를 네이버 시리즈에서 검색하여 표시하는 스크립트
 // @author       hbesthee@naver.com
@@ -21,19 +21,6 @@
 
 	// 네이버 시리즈 검색 결과를 파싱하는 클래스
 	class NaverSeriesParser {
-
-		/**
-		 * 키워드 배열로 검색 URL을 생성합니다.
-		 *
-		 * @param {Array<string>} keywords - 검색 키워드 배열
-		 * @returns {string} 네이버 시리즈 검색 URL
-		 */
-		static createSearchUrl(keywords) {
-			const query = keywords.join('+');
-			return `https://series.naver.com/search/search.series?t=novel&q=${encodeURIComponent(query)}`;
-		}
-
-
 		/**
 		 * HTML 문자열에서 검색 결과를 추출합니다.
 		 *
@@ -68,22 +55,15 @@
 	}
 
 
-
-	// 메인 처리 클래스
-	class FileLinksProcessor {
-		constructor() {
-			this.readContent = document.getElementById('read-content');
-			this.processedLinks = new Set();
-		}
-
-
+	// 제목 추출 및 처리 클래스
+	class TitleExtractor {
 		/**
 		 * 파일명에서 검색 키워드를 추출합니다.
 		 *
 		 * @param {string} filename - 파일명 문자열
 		 * @returns {Array<string>} 추출된 키워드 배열
 		 */
-		extractKeywords(filename) {
+		static extractKeywords(filename) {
 			// 파일 크기 정보 제거 (예: [599.53 KB])
 			let title = filename.replace(/\[[\d.]+\s*[KMG]?B\]/gi, '').trim();
 
@@ -103,6 +83,55 @@
 			const words = title.split(/\s+/).filter(word => word.length > 0);
 
 			return words;
+		}
+
+
+		/**
+		 * 키워드 배열로 검색 URL을 생성합니다.
+		 *
+		 * @param {Array<string>} keywords - 검색 키워드 배열
+		 * @returns {string} 네이버 시리즈 검색 URL
+		 */
+		static createSearchUrl(keywords) {
+			const query = keywords.join('+');
+			return `https://series.naver.com/search/search.series?t=novel&q=${encodeURIComponent(query)}`;
+		}
+	}
+
+
+	// 메인 처리 클래스
+	class FileLinksProcessor {
+		constructor() {
+			this.panelElements = document.querySelectorAll('.panel.panel-default');
+			this.processedLinks = new Set();
+			this.validExtensions = ['.txt', '.zip', '.rar', '.7z'];
+		}
+
+
+		/**
+		 * 파일 링크의 유효성을 검사합니다.
+		 *
+		 * @param {HTMLElement} link - 검사할 파일 링크 요소
+		 * @returns {boolean} 유효한 파일이면 true, 아니면 false
+		 */
+		isFilteredFile(link) {
+			const href = link.getAttribute('href');
+			if (!href) {
+				return false;
+			}
+
+			// "/newboard/yamoonboard/admin-board/download.asp?fullboardname=yamoonmemberboard&mtablename=request&num=51031&filename=%5B%EC%99%84%5D%EB%AC%B4%EB%A6%BC%EC%98%A4%EC%A0%81%20%EC%97%B0%EC%9E%91%2004.%EB%AC%B4%EB%A6%BC%EC%98%A4%EC%A0%81.rar"
+			// URL에서 파일명 추출
+			const splits = href.split('filename=');
+			if (splits.length < 2)
+				return false;
+			const filename = splits[1];
+
+			// 확장자 추출 (소문자로 변환)
+			const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+
+			// 유효한 확장자인지 확인
+			return this.validExtensions.includes(extension);
 		}
 
 
@@ -180,13 +209,13 @@
 			this.processedLinks.add(link);
 
 			const filename = link.textContent.trim();
-			const keywords = this.extractKeywords(filename);
+			const keywords = TitleExtractor.extractKeywords(filename);
 
 			if (keywords.length === 0) {
 				return;
 			}
 
-			const searchUrl = NaverSeriesParser.createSearchUrl(keywords);
+			const searchUrl = TitleExtractor.createSearchUrl(keywords);
 
 			// 검색 수행
 			this.searchNaverSeries(searchUrl, (results) => {
@@ -206,14 +235,19 @@
 		 * @returns {void}
 		 */
 		processAllLinks() {
-			if (!this.readContent) {
+			if (this.panelElements.length === 0) {
 				return;
 			}
 
-			const fileLinks = this.readContent.querySelectorAll('a.fr-file');
+			for (const panel of this.panelElements) {
+				const fileLinks = panel.querySelectorAll('a.fr-file');
 
-			for (const link of fileLinks) {
-				this.processFileLink(link);
+				for (const link of fileLinks) {
+					// 유효한 파일인지 확인
+					if (this.isFilteredFile(link)) {
+						this.processFileLink(link);
+					}
+				}
 			}
 		}
 
@@ -235,15 +269,15 @@
 
 			// 동적으로 추가되는 링크 감지
 			const observer = new MutationObserver(() => {
+				this.panelElements = document.querySelectorAll('.panel.panel-default');
 				this.processAllLinks();
 			});
 
-			if (this.readContent) {
-				observer.observe(this.readContent, {
-					childList: true,
-					subtree: true
-				});
-			}
+			// body 전체를 감시
+			observer.observe(document.body, {
+				childList: true,
+				subtree: true
+			});
 		}
 	}
 
