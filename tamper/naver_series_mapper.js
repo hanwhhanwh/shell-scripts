@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
-// @version      v1.1.0
+// @version      v1.1.1
 // @date         2025-11-18
 // @description  첨부된 소설의 점수를 네이버 시리즈에서 검색하여 표시하는 스크립트
 // @author       hbesthee@naver.com
@@ -75,6 +75,9 @@
 			if (match) {
 				title = match[1].trim();
 			}
+
+			title = title.replace(/\[[^\]]*\]/g, ""); // [] 문자열 제거
+			title = title.replace(/\s{2,}/g, " ").trim(); // 2개 이상의 공백을 1개로
 
 			// 쉼표 이후 내용 제거
 			title = title.split(',')[0].trim();
