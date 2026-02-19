@@ -9,7 +9,7 @@ CONTAINER_NAME=gitea
 CONTAINER_DATA_DIR=/home/${CONTAINER_NAME}
 CONTAINER_LOG=/home/logs/${CONTAINER_NAME}.log
 # rootless 이미지는 내부적으로 3000(HTTP), 2222(SSH) 포트를 기본 사용합니다.
-CONTAINER_HTTP_PORT=3000
+CONTAINER_HTTP_PORT=3333
 CONTAINER_SSH_PORT=2222
 CONTAINER_TAG=1.25-rootless
 
@@ -41,7 +41,8 @@ docker run -d \
 	-e USER_GID=1000 \
 	-p ${CONTAINER_HTTP_PORT}:3000 \
 	-p ${CONTAINER_SSH_PORT}:2222 \
-	-v ${CONTAINER_DATA_DIR}:/data \
+	-v ${CONTAINER_DATA_DIR}:/var/lib/gitea \
+	-v ${CONTAINER_DATA_DIR}/app.ini:/etc/gitea/app.ini \
 	gitea/gitea:${CONTAINER_TAG} 2>&1 | tee -a ${CONTAINER_LOG}
 
-echo "Gitea deployment completed. Access via http://localhost:${CONTAINER_HTTP_PORT}" | tee -a ${CONTAINER_LOG}
+echo "Gitea deployment completed. Access via http://g.hwh.kr:${CONTAINER_HTTP_PORT}" | tee -a ${CONTAINER_LOG}
