@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.7
+// @version      v1.1.8
 // @date         2025-08-13
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
@@ -112,17 +112,18 @@
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
 				if (!isKakao) {
-					wgetCommands.push(`curl -o "${modifiedFilename}" -K "\${HOME}/.conf/down.conf" -sS "${url.replace(YA_BASE, '\${YA_BASE}')}"`);
+					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}"`);
 				}
 				else {
-					wgetCommands.push(`curl -o "${modifiedFilename}" -K "\${HOME}/.conf/daum.conf" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
+					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
 				}
 			}
 		});
 
 		return `export DAUM_BASE="${DAUM_BASE}" ; \\\n`
 					+ `export YA_BASE="${YA_BASE}" ; \\\n`
-					+ wgetCommands.join(' ; \\\n');
+					+ `curl -K "\${HOME}/.conf/ym.conf" \\\n`
+					+ wgetCommands.join(' \\\n');
 	}
 
 
