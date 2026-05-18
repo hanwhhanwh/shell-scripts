@@ -27,7 +27,7 @@
 	 * @returns {string} 수정된 파일명
 	 */
 	function createModifiedFilename(filename) {
-		const pattern = /^([A-Z]{3,5}-\d{2,5})/;
+		const pattern = /^([0-9,A-Z]{3,6}-\d{2,5})/;
 		const filenameMatch = filename.match(pattern);
 
 		// 패턴에 일치하는 부분이 없으면 원본 파일명 반환
