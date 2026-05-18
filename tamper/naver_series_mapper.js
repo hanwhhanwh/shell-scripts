@@ -2,7 +2,7 @@
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
 // @version      v1.2.0
-// @date         2026-05-18
+// @date         2025-11-18
 // @description  첨부된 소설의 점수를 네이버 시리즈에서 검색하여 표시하고, 로컬 Everything에서 파일 존재 여부를 확인하는 스크립트
 // @author       hbesthee@naver.com
 // @match        https://*/newboard/*
@@ -98,6 +98,7 @@
 	}
 
 
+	// ─── 네이버 시리즈 파서 ──────────────────────────────────────────────────────
 
 	// 네이버 시리즈 검색 결과를 파싱하는 클래스
 	class NaverSeriesParser {
@@ -326,28 +327,39 @@
 
 
 		/**
-		 * 파일 링크로 네이버 시리즈에 검색해야할지 유효성을 검사합니다.
+		 * 링크가 다운로드 파일 href를 가지는지 확인합니다 (Everything 검색 대상 판별).
+		 *
+		 * @param {HTMLElement} link - 검사할 링크 요소
+		 * @returns {boolean} filename 파라미터가 있으면 true
+		 */
+		hasDownloadLink(link) {
+			const href = link.getAttribute('href');
+			if (!href) {
+				return false;
+			}
+			return href.split('filename=').length >= 2;
+		}
+
+
+		/**
+		 * 링크가 네이버 시리즈 검색 대상 확장자인지 확인합니다.
 		 *
 		 * @param {HTMLElement} link - 검사할 파일 링크 요소
-		 * @returns {boolean} 유효한 파일이면 true, 아니면 false
+		 * @returns {boolean} validExtensions에 해당하면 true
 		 */
-		isFilteredFile(link) {
+		isNaverTargetFile(link) {
 			const href = link.getAttribute('href');
 			if (!href) {
 				return false;
 			}
 
-			// "/newboard/yamoonboard/admin-board/download.asp?fullboardname=yamoonmemberboard&mtablename=request&num=51031&filename=%5B%EC%99%84%5D%EB%AC%B4%EB%A6%BC%EC%98%A4%EC%A0%81%20%EC%97%B0%EC%9E%91%2004.%EB%AC%B4%EB%A6%BC%EC%98%A4%EC%A0%81.rar"
-			// URL에서 파일명 추출
 			const splits = href.split('filename=');
 			if (splits.length < 2) {
 				return false;
 			}
 			const filename = splits[1];
-			// 확장자 추출 (소문자로 변환)
 			const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
 
-			// 유효한 확장자인지 확인
 			return this.validExtensions.includes(extension);
 		}
 
@@ -492,29 +504,33 @@
 
 
 		/**
-		 * 파일 링크를 처리합니다 (Everything 확인 + 네이버 시리즈 검색).
+		 * 링크의 Everything 로컬 존재 여부를 확인합니다 (모든 첨부 파일 대상).
 		 *
 		 * @param {HTMLElement} link - 처리할 파일 링크 요소
 		 * @returns {void}
 		 */
-		processFileLink(link) {
-			if (this.processedLinks.has(link)) {
-				return;
-			}
-			this.processedLinks.add(link);
-
-			// ── Everything 로컬 검색 ──────────────────────────────────────
+		processEverythingSearch(link) {
 			const rawFilename = this._extractFilenameFromHref(link);
 			const everythingKeyword = TitleExtractor.extractEverythingKeyword(rawFilename);
 
-			if (everythingKeyword) {
-				const everythingUrl = TitleExtractor.createEverythingSearchUrl(everythingKeyword);
-				this.searchEverything(everythingUrl, (results) => {
-					this.appendEverythingBadge(link, results);
-				});
+			if (!everythingKeyword) {
+				return;
 			}
 
-			// ── 네이버 시리즈 검색 ───────────────────────────────────────
+			const everythingUrl = TitleExtractor.createEverythingSearchUrl(everythingKeyword);
+			this.searchEverything(everythingUrl, (results) => {
+				this.appendEverythingBadge(link, results);
+			});
+		}
+
+
+		/**
+		 * 링크의 네이버 시리즈 검색을 수행합니다 (validExtensions 대상만).
+		 *
+		 * @param {HTMLElement} link - 처리할 파일 링크 요소
+		 * @returns {void}
+		 */
+		processNaverSearch(link) {
 			const displayFilename = link.textContent.trim();
 			const naverKeywords = TitleExtractor.extractNaverKeywords(displayFilename);
 
@@ -526,6 +542,30 @@
 			this.searchNaverSeries(naverUrl, (results) => {
 				this.appendNaverSearchResult(link, results.length > 0 ? results[0] : null);
 			});
+		}
+
+
+		/**
+		 * 파일 링크를 처리합니다.
+		 * - Everything 검색: 모든 첨부 파일 (hasDownloadLink 통과)
+		 * - 네이버 시리즈 검색: validExtensions 해당 파일만 (isNaverTargetFile 통과)
+		 *
+		 * @param {HTMLElement} link - 처리할 파일 링크 요소
+		 * @returns {void}
+		 */
+		processFileLink(link) {
+			if (this.processedLinks.has(link)) {
+				return;
+			}
+			this.processedLinks.add(link);
+
+			// ── Everything 로컬 검색: 모든 첨부 파일 ─────────────────────
+			this.processEverythingSearch(link);
+
+			// ── 네이버 시리즈 검색: validExtensions 해당 파일만 ──────────
+			if (this.isNaverTargetFile(link)) {
+				this.processNaverSearch(link);
+			}
 		}
 
 
@@ -543,7 +583,8 @@
 				const fileLinks = panel.querySelectorAll('a.fr-file');
 
 				for (const link of fileLinks) {
-					if (this.isFilteredFile(link)) {
+					// Everything: 다운로드 링크가 있는 모든 첨부 파일 대상
+					if (this.hasDownloadLink(link)) {
 						this.processFileLink(link);
 					}
 				}
