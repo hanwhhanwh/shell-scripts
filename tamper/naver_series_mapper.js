@@ -28,6 +28,9 @@
 	/** 품번 패턴 (예: ABC-12345, 12345-678) */
 	const PRODUCT_CODE_PATTERN = /^([0-9,A-Z]{3,6}-\d{2,5})/;
 
+	/** attach URL 접두사: href가 이 문자열로 시작하면 textContent를 파일명으로 처리 */
+	const ATTACH_URL_PREFIX = 'https://attach';
+
 	// ─── Everything HTTP 파서 ────────────────────────────────────────────────────
 
 	// Everything HTTP 검색 결과를 파싱하는 클래스
@@ -144,7 +147,7 @@
 		 * 파일명에서 Everything 검색용 키워드를 추출합니다.
 		 * 품번 패턴이 있으면 해당 패턴을, 없으면 앞의 2 단어를 반환합니다.
 		 *
-		 * @param {string} filename - 원본 파일명 문자열 (URL 인코딩 포함 가능)
+		 * @param {string} filename - 파일명 문자열 (URL 인코딩 포함 가능)
 		 * @returns {string} 검색 키워드 문자열
 		 */
 		static extractEverythingKeyword(filename) {
@@ -327,32 +330,37 @@
 
 
 		/**
-		 * 링크가 다운로드 파일 href를 가지는지 확인합니다 (Everything 검색 대상 판별).
+		 * 링크 타입을 판별합니다.
+		 * - 'attach' : href가 ATTACH_URL_PREFIX로 시작 → textContent를 파일명으로 처리
+		 * - 'download': href에 'filename=' 파라미터 포함 → 기존 방식으로 처리
+		 * - null      : 처리 대상 아님
 		 *
 		 * @param {HTMLElement} link - 검사할 링크 요소
-		 * @returns {boolean} filename 파라미터가 있으면 true
+		 * @returns {'attach'|'download'|null} 링크 타입
 		 */
-		hasDownloadLink(link) {
+		getLinkType(link) {
 			const href = link.getAttribute('href');
 			if (!href) {
-				return false;
+				return null;
 			}
-			return href.split('filename=').length >= 2;
+			if (href.startsWith(ATTACH_URL_PREFIX)) {
+				return 'attach';
+			}
+			if (href.includes('filename=')) {
+				return 'download';
+			}
+			return null;
 		}
 
 
 		/**
-		 * 링크가 네이버 시리즈 검색 대상 확장자인지 확인합니다.
+		 * 링크가 네이버 시리즈 검색 대상 확장자인지 확인합니다 (download 타입 전용).
 		 *
 		 * @param {HTMLElement} link - 검사할 파일 링크 요소
 		 * @returns {boolean} validExtensions에 해당하면 true
 		 */
 		isNaverTargetFile(link) {
-			const href = link.getAttribute('href');
-			if (!href) {
-				return false;
-			}
-
+			const href = link.getAttribute('href') || '';
 			const splits = href.split('filename=');
 			if (splits.length < 2) {
 				return false;
@@ -365,10 +373,10 @@
 
 
 		/**
-		 * href에서 파일명 부분을 추출합니다.
+		 * download 타입 링크에서 파일명을 추출합니다 (URL 인코딩 상태).
 		 *
 		 * @param {HTMLElement} link - 대상 링크 요소
-		 * @returns {string} 파일명 문자열 (URL 인코딩 상태)
+		 * @returns {string} 파일명 문자열
 		 */
 		_extractFilenameFromHref(link) {
 			const href = link.getAttribute('href') || '';
@@ -504,53 +512,78 @@
 
 
 		/**
-		 * 링크의 Everything 로컬 존재 여부를 확인합니다 (모든 첨부 파일 대상).
+		 * 키워드로 Everything 검색 후 뱃지를 삽입합니다.
 		 *
-		 * @param {HTMLElement} link - 처리할 파일 링크 요소
+		 * @param {HTMLElement} link - 대상 링크 요소
+		 * @param {string} filename - 파일명 문자열 (URL 인코딩 포함 가능)
 		 * @returns {void}
 		 */
-		processEverythingSearch(link) {
-			const rawFilename = this._extractFilenameFromHref(link);
-			const everythingKeyword = TitleExtractor.extractEverythingKeyword(rawFilename);
-
-			if (!everythingKeyword) {
+		_runEverythingSearch(link, filename) {
+			const keyword = TitleExtractor.extractEverythingKeyword(filename);
+			if (!keyword) {
 				return;
 			}
 
-			const everythingUrl = TitleExtractor.createEverythingSearchUrl(everythingKeyword);
-			this.searchEverything(everythingUrl, (results) => {
+			const url = TitleExtractor.createEverythingSearchUrl(keyword);
+			this.searchEverything(url, (results) => {
 				this.appendEverythingBadge(link, results);
 			});
 		}
 
 
 		/**
-		 * 링크의 네이버 시리즈 검색을 수행합니다 (validExtensions 대상만).
+		 * attach 타입 링크를 처리합니다.
+		 * href가 ATTACH_URL_PREFIX로 시작하는 경우, textContent를 파일명으로 간주하여
+		 * Everything 로컬 검색만 수행합니다.
 		 *
-		 * @param {HTMLElement} link - 처리할 파일 링크 요소
+		 * @param {HTMLElement} link - 처리할 링크 요소
 		 * @returns {void}
 		 */
-		processNaverSearch(link) {
-			const displayFilename = link.textContent.trim();
-			const naverKeywords = TitleExtractor.extractNaverKeywords(displayFilename);
-
-			if (naverKeywords.length === 0) {
+		processAttachLink(link) {
+			const filename = link.textContent.trim();
+			if (!filename) {
 				return;
 			}
-
-			const naverUrl = TitleExtractor.createNaverSearchUrl(naverKeywords);
-			this.searchNaverSeries(naverUrl, (results) => {
-				this.appendNaverSearchResult(link, results.length > 0 ? results[0] : null);
-			});
+			this._runEverythingSearch(link, filename);
 		}
 
 
 		/**
-		 * 파일 링크를 처리합니다.
-		 * - Everything 검색: 모든 첨부 파일 (hasDownloadLink 통과)
-		 * - 네이버 시리즈 검색: validExtensions 해당 파일만 (isNaverTargetFile 통과)
+		 * download 타입 링크를 처리합니다.
+		 * href의 filename= 파라미터에서 파일명을 추출하여 Everything 검색을 수행하고,
+		 * validExtensions 해당 시 네이버 시리즈 검색도 수행합니다.
 		 *
-		 * @param {HTMLElement} link - 처리할 파일 링크 요소
+		 * @param {HTMLElement} link - 처리할 링크 요소
+		 * @returns {void}
+		 */
+		processDownloadLink(link) {
+			// ── Everything 로컬 검색 ──────────────────────────────────────
+			const rawFilename = this._extractFilenameFromHref(link);
+			this._runEverythingSearch(link, rawFilename);
+
+			// ── 네이버 시리즈 검색: validExtensions 해당 파일만 ──────────
+			if (this.isNaverTargetFile(link)) {
+				const displayFilename = link.textContent.trim();
+				const naverKeywords = TitleExtractor.extractNaverKeywords(displayFilename);
+
+				if (naverKeywords.length === 0) {
+					return;
+				}
+
+				const naverUrl = TitleExtractor.createNaverSearchUrl(naverKeywords);
+				this.searchNaverSeries(naverUrl, (results) => {
+					this.appendNaverSearchResult(link, results.length > 0 ? results[0] : null);
+				});
+			}
+		}
+
+
+		/**
+		 * 파일 링크를 타입에 따라 분기 처리합니다.
+		 * - attach 타입: textContent를 파일명으로 Everything 검색
+		 * - download 타입: href filename= 기반 Everything 검색 + 조건부 네이버 시리즈 검색
+		 *
+		 * @param {HTMLElement} link - 처리할 링크 요소
 		 * @returns {void}
 		 */
 		processFileLink(link) {
@@ -559,12 +592,12 @@
 			}
 			this.processedLinks.add(link);
 
-			// ── Everything 로컬 검색: 모든 첨부 파일 ─────────────────────
-			this.processEverythingSearch(link);
+			const linkType = this.getLinkType(link);
 
-			// ── 네이버 시리즈 검색: validExtensions 해당 파일만 ──────────
-			if (this.isNaverTargetFile(link)) {
-				this.processNaverSearch(link);
+			if (linkType === 'attach') {
+				this.processAttachLink(link);
+			} else if (linkType === 'download') {
+				this.processDownloadLink(link);
 			}
 		}
 
@@ -580,13 +613,10 @@
 			}
 
 			for (const panel of this.panelElements) {
-				const fileLinks = panel.querySelectorAll('a.fr-file');
+				const fileLinks = panel.querySelectorAll('a'); // .fr-file = 첨부파일
 
 				for (const link of fileLinks) {
-					// Everything: 다운로드 링크가 있는 모든 첨부 파일 대상
-					if (this.hasDownloadLink(link)) {
-						this.processFileLink(link);
-					}
+					this.processFileLink(link);
 				}
 			}
 		}
