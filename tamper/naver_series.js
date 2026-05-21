@@ -3,7 +3,7 @@
 // @namespace    http://hwh.kr/
 // @version      v1.2.0
 // @date         2025-11-18
-// @description  첨부 파일의 네이버 시리즈 점수 표시 + Everything HTTP 로컬 존재 여부 확인 통합
+// @description  첨부 파일의 네이버 시리즈 점수 + Everything HTTP 로컬 존재 여부 확인 통합
 // @author       hbesthee@naver.com
 // @match        *://*/newboard/*
 // @run-at       document-end
@@ -13,20 +13,19 @@
 // @connect      series.naver.com
 // @connect      localhost
 // ==/UserScript==
-
 (function() {
-	console.log('%cStart ' + GM_info.script.name + ', v' + GM_info.script.version + ' by ' + GM_info.script.author, 'color: red');
-
     'use strict';
-
-    // 툴팁 CSS
+    console.log('%cStart ' + GM_info.script.name + ', v' + GM_info.script.version + ' by ' + GM_info.script.author, 'color: red');
+    // 툴팁 스타일 (position: fixed로 스크롤 문제 해결)
     GM_addStyle(`
         .ev-popup {
-            position: absolute; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
-            font-size: 12px; line-height: 1.4; z-index: 9999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
-            max-height: 250px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
-            display: none; pointer-events: none;
+            position: fixed; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
+            font-size: 12px; line-height: 1.4; z-index: 99999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
+            max-height: 300px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
+            display: none; pointer-events: none; word-break: break-all;
         }
+        .ev-popup strong { color:  #333; }
+        .ev-popup .ev-meta { color:  #666; font-size: 11px; margin-top: 2px; }
     `);
     /** 네이버 시리즈 파서 */
     class NaverSeriesParser {
@@ -66,14 +65,11 @@
             const query = keywords.join('+');
             return `https://series.naver.com/search/search.series?t=novel&q=${encodeURIComponent(query)}`;
         }
-        // Everything 로컬 검색용 키워드 추출
         static extractEverythingKeyword(filename) {
             let clean = filename.replace(/\[[\d.]+\s*[KMG]?B\]/gi, '').replace(/\.\w+$/, '').trim();
             clean = clean.replace(/\[[^\]]*\]/g, ' ').trim();
-            // 품번 패턴 매칭 (공백 제외 대문자/숫자 3~6자리 - 숫자 2~5자리)
             const partNumMatch = clean.match(/^([0-9A-Z]{3,6}-\d{2,5})/);
             if (partNumMatch) return partNumMatch[1];
-            // 품번 없으면 앞의 2개 단어
             const words = clean.split(/\s+/).filter(w => w.length > 0);
             return words.slice(0, 2).join(' ');
         }
@@ -84,30 +80,31 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             const results = [];
-            // 테이블 행 기반 파싱
             const rows = doc.querySelectorAll('tr');
+            // 테이블 행 기준 파싱 (Name, Path, Size, Date 순서 예상)
             rows.forEach(row => {
-                const links = row.querySelectorAll('a');
-                links.forEach(link => {
-                    const href = link.getAttribute('href') || '';
-                    const text = link.textContent.trim();
-                    if (!text) return;
-                    if (href.startsWith('https://attach')) {
-                        results.push(text);
-                    } else if (href && !href.startsWith('#') && !href.includes('search=')) {
-                        results.push(text);
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 4) {
+                    const name = cells[0].textContent.trim();
+                    const size = cells[2].textContent.trim();
+                    const date = cells[3].textContent.trim();
+                    // 헤더 제외 및 유효한 파일명 필터링
+                    if (name && name !== '이름' && name !== 'Name' && !name.includes('Everything')) {
+                        results.push({ name, size, date });
                     }
-                });
+                }
             });
-            // 테이블이 없을 경우 전체 링크Fallback
+            // 테이블 구조가 아닐 경우 Fallback
             if (results.length === 0) {
                 doc.querySelectorAll('a').forEach(link => {
                     const href = link.getAttribute('href') || '';
                     const text = link.textContent.trim();
-                    if (text && !href.includes('search=')) results.push(text);
+                    if (text && !href.includes('search=')) {
+                        results.push({ name: text, size: '-', date: '-' });
+                    }
                 });
             }
-            return [...new Set(results)];
+            return results;
         }
     }
     /** 메인 처리 클래스 */
@@ -119,7 +116,15 @@
             this.tooltipEl = document.createElement('div');
             this.tooltipEl.className = 'ev-popup';
             document.body.appendChild(this.tooltipEl);
+            this.scrollHideHandler = this.hideTooltip.bind(this);
         }
+        // Everything 검색 대상 파일 여부 확인 (요청 조건 반영)
+        shouldProcessForEverything(link) {
+            const href = link.getAttribute('href');
+            if (!href) return false;
+            return href.startsWith('https://attach') || href.includes('filename=');
+        }
+        // 네이버 시리즈 검색 대상 파일 여부 확인
         isFilteredFile(link) {
             const href = link.getAttribute('href');
             if (!href) return false;
@@ -133,10 +138,7 @@
             const gmXHR = (typeof GM !== 'undefined' && GM.xmlHttpRequest) ? GM.xmlHttpRequest : GM_xmlhttpRequest;
             gmXHR({
                 method: 'GET', url: url,
-                onload: res => {
-                    if (res.status === 200) callback(NaverSeriesParser.parseSearchResults(res.responseText));
-                    else callback([]);
-                },
+                onload: res => res.status === 200 ? callback(NaverSeriesParser.parseSearchResults(res.responseText)) : callback([]),
                 onerror: () => callback([])
             });
         }
@@ -145,10 +147,7 @@
             const gmXHR = (typeof GM !== 'undefined' && GM.xmlHttpRequest) ? GM.xmlHttpRequest : GM_xmlhttpRequest;
             gmXHR({
                 method: 'GET', url: url,
-                onload: res => {
-                    if (res.status === 200) callback(EverythingParser.parse(res.responseText));
-                    else callback([]);
-                },
+                onload: res => res.status === 200 ? callback(EverythingParser.parse(res.responseText)) : callback([]),
                 onerror: () => callback([])
             });
         }
@@ -168,27 +167,37 @@
             span.style.fontWeight = 'bold';
             span.textContent = results.length > 0 ? 'O' : 'X';
             if (results.length > 0) {
-                const content = results.join('\n');
-                span.addEventListener('mouseenter', (e) => {
-                    this.tooltipEl.textContent = content;
+                const content = results.map(r => 
+                    `<strong>${r.name}</strong><div class="ev-meta">크기: ${r.size} | 날짜: ${r.date}</div>`
+                ).join('<hr style="margin:4px 0;border:0;border-top:1px solid  #eee;">');
+                span.addEventListener('mouseenter', () => {
+                    const rect = linkEl.getBoundingClientRect();
+                    this.tooltipEl.innerHTML = content;
                     this.tooltipEl.style.display = 'block';
-                    const rect = span.getBoundingClientRect();
+                    // 뷰포트 기준 고정 위치
                     this.tooltipEl.style.left = `${rect.left}px`;
                     this.tooltipEl.style.top = `${rect.bottom + 5}px`;
+                    // 스크롤 시 팝업 숨김 (위치 땡겨짐 방지)
+                    window.addEventListener('scroll', this.scrollHideHandler, { once: true });
                 });
                 span.addEventListener('mouseleave', () => {
                     this.tooltipEl.style.display = 'none';
+                    window.removeEventListener('scroll', this.scrollHideHandler);
                 });
             }
             linkEl.parentNode.insertBefore(span, linkEl.nextSibling);
         }
+        hideTooltip() {
+            this.tooltipEl.style.display = 'none';
+        }
         processFileLink(link) {
             if (this.processedLinks.has(link)) return;
             this.processedLinks.add(link);
+            if (!this.shouldProcessForEverything(link)) return;
             const filename = link.textContent.trim();
             const evKeyword = TitleExtractor.extractEverythingKeyword(filename);
             if (!evKeyword) return;
-            // 1. Everything 로컬 검색 (모든 파일 대상)
+            // 1. Everything 로컬 검색
             this.searchEverything(evKeyword, (evResults) => {
                 this.appendEverythingStatus(link, evResults);
                 // 2. 유효 확장자일 경우에만 네이버 시리즈 검색
@@ -208,11 +217,7 @@
             if (this.panelElements.length === 0) return;
             for (const panel of this.panelElements) {
                 const fileLinks = panel.querySelectorAll('a.fr-file');
-                fileLinks.forEach(link => {
-                    if (this.isFilteredFile(link) || link.textContent.trim().length > 0) {
-                        this.processFileLink(link);
-                    }
-                });
+                fileLinks.forEach(link => this.processFileLink(link));
             }
         }
         init() {
