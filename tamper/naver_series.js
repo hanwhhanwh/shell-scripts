@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         naver_series_mapper
+// @name         naver_series_plus
 // @namespace    http://hwh.kr/
 // @version      v1.2.0
 // @date         2025-11-18
@@ -16,16 +16,16 @@
 (function() {
     'use strict';
     console.log('%cStart ' + GM_info.script.name + ', v' + GM_info.script.version + ' by ' + GM_info.script.author, 'color: red');
-    // 툴팁 스타일 (position: fixed로 스크롤 문제 해결)
+    // 툴팁 스타일 (position: fixed + 마우스 추종용 패딩/그림자)
     GM_addStyle(`
         .ev-popup {
             position: fixed; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
             font-size: 12px; line-height: 1.4; z-index: 99999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
-            max-height: 300px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
-            display: none; pointer-events: none; word-break: break-all;
+            max-height: 350px; max-width: 400px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
+            display: none; pointer-events: none; word-break: break-all; transition: none;
         }
-        .ev-popup strong { color:  #333; }
-        .ev-popup .ev-meta { color:  #666; font-size: 11px; margin-top: 2px; }
+        .ev-popup strong { color:  #222; }
+        .ev-popup .ev-meta { color:  #555; font-size: 11px; margin-top: 2px; }
     `);
     /** 네이버 시리즈 파서 */
     class NaverSeriesParser {
@@ -81,20 +81,17 @@
             const doc = parser.parseFromString(html, 'text/html');
             const results = [];
             const rows = doc.querySelectorAll('tr');
-            // 테이블 행 기준 파싱 (Name, Path, Size, Date 순서 예상)
             rows.forEach(row => {
                 const cells = row.querySelectorAll('td');
                 if (cells.length >= 4) {
                     const name = cells[0].textContent.trim();
                     const size = cells[2].textContent.trim();
                     const date = cells[3].textContent.trim();
-                    // 헤더 제외 및 유효한 파일명 필터링
                     if (name && name !== '이름' && name !== 'Name' && !name.includes('Everything')) {
                         results.push({ name, size, date });
                     }
                 }
             });
-            // 테이블 구조가 아닐 경우 Fallback
             if (results.length === 0) {
                 doc.querySelectorAll('a').forEach(link => {
                     const href = link.getAttribute('href') || '';
@@ -110,21 +107,20 @@
     /** 메인 처리 클래스 */
     class FileLinksProcessor {
         constructor() {
-            this.panelElements = document.querySelectorAll('.panel.panel-default');
             this.processedLinks = new Set();
             this.validExtensions = ['.txt', '.zip', '.rar', '.7z'];
             this.tooltipEl = document.createElement('div');
             this.tooltipEl.className = 'ev-popup';
             document.body.appendChild(this.tooltipEl);
             this.scrollHideHandler = this.hideTooltip.bind(this);
+            // 메서드 바인딩
+            this.positionTooltip = this.positionTooltip.bind(this);
         }
-        // Everything 검색 대상 파일 여부 확인 (요청 조건 반영)
         shouldProcessForEverything(link) {
             const href = link.getAttribute('href');
             if (!href) return false;
             return href.startsWith('https://attach') || href.includes('filename=');
         }
-        // 네이버 시리즈 검색 대상 파일 여부 확인
         isFilteredFile(link) {
             const href = link.getAttribute('href');
             if (!href) return false;
@@ -170,22 +166,34 @@
                 const content = results.map(r => 
                     `<strong>${r.name}</strong><div class="ev-meta">크기: ${r.size} | 날짜: ${r.date}</div>`
                 ).join('<hr style="margin:4px 0;border:0;border-top:1px solid  #eee;">');
-                span.addEventListener('mouseenter', () => {
-                    const rect = linkEl.getBoundingClientRect();
+                span.addEventListener('mouseenter', (e) => {
                     this.tooltipEl.innerHTML = content;
-                    this.tooltipEl.style.display = 'block';
-                    // 뷰포트 기준 고정 위치
-                    this.tooltipEl.style.left = `${rect.left}px`;
-                    this.tooltipEl.style.top = `${rect.bottom + 5}px`;
-                    // 스크롤 시 팝업 숨김 (위치 땡겨짐 방지)
+                    this.positionTooltip(e);
                     window.addEventListener('scroll', this.scrollHideHandler, { once: true });
+                    span.addEventListener('mousemove', this.positionTooltip);
                 });
                 span.addEventListener('mouseleave', () => {
                     this.tooltipEl.style.display = 'none';
                     window.removeEventListener('scroll', this.scrollHideHandler);
+                    span.removeEventListener('mousemove', this.positionTooltip);
                 });
             }
             linkEl.parentNode.insertBefore(span, linkEl.nextSibling);
+        }
+        positionTooltip(e) {
+            this.tooltipEl.style.display = 'block';
+            let x = e.clientX + 15;
+            let y = e.clientY + 15;
+            const rect = this.tooltipEl.getBoundingClientRect();
+            // 뷰포트 우측 하단 경계 체크
+            if (x + rect.width > window.innerWidth - 10) {
+                x = e.clientX - rect.width - 10;
+            }
+            if (y + rect.height > window.innerHeight - 10) {
+                y = e.clientY - rect.height - 10;
+            }
+            this.tooltipEl.style.left = `${x}px`;
+            this.tooltipEl.style.top = `${y}px`;
         }
         hideTooltip() {
             this.tooltipEl.style.display = 'none';
@@ -197,10 +205,8 @@
             const filename = link.textContent.trim();
             const evKeyword = TitleExtractor.extractEverythingKeyword(filename);
             if (!evKeyword) return;
-            // 1. Everything 로컬 검색
             this.searchEverything(evKeyword, (evResults) => {
                 this.appendEverythingStatus(link, evResults);
-                // 2. 유효 확장자일 경우에만 네이버 시리즈 검색
                 if (this.isFilteredFile(link)) {
                     const naverKeywords = TitleExtractor.extractKeywords(filename);
                     if (naverKeywords.length > 0) {
@@ -213,9 +219,10 @@
             });
         }
         processAllLinks() {
-            this.panelElements = document.querySelectorAll('.panel.panel-default');
-            if (this.panelElements.length === 0) return;
-            for (const panel of this.panelElements) {
+            // 🔄 선택자 변경 반영
+            const panels = document.querySelectorAll('#read-content, #membersubframe');
+            if (panels.length === 0) return;
+            for (const panel of panels) {
                 const fileLinks = panel.querySelectorAll('a.fr-file');
                 fileLinks.forEach(link => this.processFileLink(link));
             }
