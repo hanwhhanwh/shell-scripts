@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         naver_series_plus
+// @name         naver_series_mapper
 // @namespace    http://hwh.kr/
 // @version      v1.2.0
 // @date         2025-11-18
@@ -16,16 +16,17 @@
 (function() {
     'use strict';
     console.log('%cStart ' + GM_info.script.name + ', v' + GM_info.script.version + ' by ' + GM_info.script.author, 'color: red');
-    // 툴팁 스타일 (position: fixed + 마우스 추종용 패딩/그림자)
+    // 툴팁 스타일 (position: fixed + 마우스 추종 + 경로 긴 텍스트 처리)
     GM_addStyle(`
         .ev-popup {
             position: fixed; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
             font-size: 12px; line-height: 1.4; z-index: 99999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
-            max-height: 350px; max-width: 400px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
+            max-height: 350px; max-width: 450px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
             display: none; pointer-events: none; word-break: break-all; transition: none;
         }
-        .ev-popup strong { color:  #222; }
+        .ev-popup strong { color:  #222; display: block; margin-bottom: 4px; }
         .ev-popup .ev-meta { color:  #555; font-size: 11px; margin-top: 2px; }
+        .ev-popup .ev-path { color:  #0055a4; font-family: monospace; }
     `);
     /** 네이버 시리즈 파서 */
     class NaverSeriesParser {
@@ -85,19 +86,22 @@
                 const cells = row.querySelectorAll('td');
                 if (cells.length >= 4) {
                     const name = cells[0].textContent.trim();
+                    const path = cells[1].textContent.trim(); // 📂 파일 경로 추출
                     const size = cells[2].textContent.trim();
                     const date = cells[3].textContent.trim();
+                    // 헤더 및 비정상 행 필터링
                     if (name && name !== '이름' && name !== 'Name' && !name.includes('Everything')) {
-                        results.push({ name, size, date });
+                        results.push({ name, path, size, date });
                     }
                 }
             });
+            // 테이블 구조가 아닐 경우 Fallback
             if (results.length === 0) {
                 doc.querySelectorAll('a').forEach(link => {
                     const href = link.getAttribute('href') || '';
                     const text = link.textContent.trim();
                     if (text && !href.includes('search=')) {
-                        results.push({ name: text, size: '-', date: '-' });
+                        results.push({ name: text, path: '-', size: '-', date: '-' });
                     }
                 });
             }
@@ -113,7 +117,6 @@
             this.tooltipEl.className = 'ev-popup';
             document.body.appendChild(this.tooltipEl);
             this.scrollHideHandler = this.hideTooltip.bind(this);
-            // 메서드 바인딩
             this.positionTooltip = this.positionTooltip.bind(this);
         }
         shouldProcessForEverything(link) {
@@ -163,9 +166,12 @@
             span.style.fontWeight = 'bold';
             span.textContent = results.length > 0 ? 'O' : 'X';
             if (results.length > 0) {
+                // 📂 경로 포함 템플릿
                 const content = results.map(r => 
-                    `<strong>${r.name}</strong><div class="ev-meta">크기: ${r.size} | 날짜: ${r.date}</div>`
-                ).join('<hr style="margin:4px 0;border:0;border-top:1px solid  #eee;">');
+                    `<strong>${r.name}</strong>
+                     <div class="ev-meta ev-path">📁 ${r.path}</div>
+                     <div class="ev-meta">📏 ${r.size} &nbsp;|&nbsp; 📅 ${r.date}</div>`
+                ).join('<hr style="margin:5px 0;border:0;border-top:1px solid  #eee;">');
                 span.addEventListener('mouseenter', (e) => {
                     this.tooltipEl.innerHTML = content;
                     this.positionTooltip(e);
@@ -185,13 +191,8 @@
             let x = e.clientX + 15;
             let y = e.clientY + 15;
             const rect = this.tooltipEl.getBoundingClientRect();
-            // 뷰포트 우측 하단 경계 체크
-            if (x + rect.width > window.innerWidth - 10) {
-                x = e.clientX - rect.width - 10;
-            }
-            if (y + rect.height > window.innerHeight - 10) {
-                y = e.clientY - rect.height - 10;
-            }
+            if (x + rect.width > window.innerWidth - 10) x = e.clientX - rect.width - 10;
+            if (y + rect.height > window.innerHeight - 10) y = e.clientY - rect.height - 10;
             this.tooltipEl.style.left = `${x}px`;
             this.tooltipEl.style.top = `${y}px`;
         }
@@ -219,7 +220,6 @@
             });
         }
         processAllLinks() {
-            // 🔄 선택자 변경 반영
             const panels = document.querySelectorAll('#read-content, #membersubframe');
             if (panels.length === 0) return;
             for (const panel of panels) {
