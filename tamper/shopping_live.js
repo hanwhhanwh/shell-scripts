@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Shopping Live Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  5초 지연 실행, 안전한 뒤로가기 주소 변경 및 페이 페이지 내 쇼핑라이브 링크 자동 클릭 로직 추가
 // @author       hbesthee@naver.com
 // @match        *://*/*shopping-live.html*
 // @match        *://*/*live-view.html*
-// @match        *://*.com/pc/main*
+// @match        *://*.com/pc/main
 // @grant        none
 // ==/UserScript==
 
@@ -79,7 +79,7 @@
 				clearInterval(logTimer);
 				safeBack();
 			}, BACK_INTERVAL);
-			
+
 			return;
 		}
 
@@ -87,11 +87,15 @@
 		if (currentUrl.includes('/pc/main')) {
 			console.log("/pc/main 감지: '쇼핑라이브 보고' 링크를 탐색합니다.");
 			const elms = document.querySelectorAll("a");
-			
+
 			elms.forEach((elm) => {
 				if (elm.innerText.includes('쇼핑라이브 보고')) {
 					console.log("대상 요소를 찾았습니다:", elm);
 					elm.click();
+					// 쇼핑라이브 클릭 후, 만약을 위한 새로고침 타이머 구동
+					setInterval(() => {
+						window.location.reload();
+					}, LOG_INTERVAL); // click()를 호출했음에도 페이지 변경 실패 시, 새로고침
 				}
 			});
 			return;
