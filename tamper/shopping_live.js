@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Shopping Live Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.3
-// @description  5초 지연 실행, 10초 후 안전한 뒤로가기, live-view.html에서 3초마다 로그 출력을 수행합니다.
+// @version      0.4
+// @description  5초 지연 실행, 안전한 뒤로가기 주소 변경 및 페이 페이지 내 쇼핑라이브 링크 자동 클릭 로직 추가
 // @author       hbesthee@naver.com
 // @match        *://*/*shopping-live.html*
 // @match        *://*/*live-view.html*
+// @match        *://*.com/pc/main*
 // @grant        none
 // ==/UserScript==
 
@@ -18,6 +19,7 @@
 	const BACK_INTERVAL = 10 * 1000;         // 10초 (밀리초)
 	const LOG_INTERVAL = 3 * 1000;           // 3초 (밀리초)
 	const START_DELAY = 5 * 1000;            // 5초 지연 (밀리초)
+	const FALLBACK_URL = "https://point.pay.naver.com/pc/main";
 
 	/**
 	 * 특정 선택자로 요소를 찾아 내부 이미지의 src를 검사하고 클릭 이벤트를 발생시킵니다.
@@ -44,14 +46,14 @@
 
 	/**
 	 * 안전한 뒤로가기 수행 함수
-	 * 이동할 수 있는 이전 히스토리가 있으면 뒤로 가고, 없으면 메인 쇼핑 페이지로 이동합니다.
+	 * 이동할 수 있는 이전 히스토리가 있으면 뒤로 가고, 없으면 메인 페이지로 이동합니다.
 	 */
 	function safeBack() {
 		if (document.referrer && window.history.length > 1) {
 			window.history.back();
 		} else {
-			// 이전 기록이 없는 경우 안전하게 메인 주소로 이동 (도메인 고유 주소에 맞게 수정 가능)
-			window.location.href = "shopping-live.html";
+			console.log(`이전 기록이 없어 지정된 주소로 이동합니다: ${FALLBACK_URL}`);
+			window.location.href = FALLBACK_URL;
 		}
 	}
 
@@ -66,28 +68,40 @@
 			let logCount = 0;
 			console.log("live-view.html 감지: 10초 후 안전한 뒤로 가기를 수행합니다.");
 
-			// 3초마다 출력 횟수와 현재 시각 출력하는 타이머
+			// 출력 횟수와 현재 시각 출력하는 타이머
 			const logTimer = setInterval(() => {
 				logCount++;
 				const currentTime = new Date().toLocaleTimeString();
-				console.log(`[로그 ${logCount회}] 현재 시각: ${currentTime}`);
+				console.log(`[로그 ${logCount}회] 현재 시각: ${currentTime}`);
 			}, LOG_INTERVAL);
 
-			// 10초 후 뒤로가기 실행 및 주기적 로그 타이머 제거
 			setTimeout(() => {
 				clearInterval(logTimer);
 				safeBack();
 			}, BACK_INTERVAL);
 			
-			return; // live-view 로직 수행 후 종료
+			return;
 		}
 
-		// 2. shopping-live.html 주소인 경우
+		// 2. /pc/main 주소인 경우 (메인 페이지 등)
+		if (currentUrl.includes('/pc/main')) {
+			console.log("/pc/main 감지: '쇼핑라이브 보고' 링크를 탐색합니다.");
+			const elms = document.querySelectorAll("a");
+			
+			elms.forEach((elm) => {
+				if (elm.innerText.includes('쇼핑라이브 보고')) {
+					console.log("대상 요소를 찾았습니다:", elm);
+					elm.click();
+				}
+			});
+			return;
+		}
+
+		// 3. shopping-live.html 주소인 경우
 		if (currentUrl.includes('shopping-live.html')) {
 			const clickedOnAir = processElements('#onair-list .list-item');
 			const clickedEndList = processElements('#end-list .comming-list-thumb');
 
-			// 조건에 맞는 요소가 전혀 없으면 10분 타이머 구동
 			if (!clickedOnAir && !clickedEndList) {
 				console.log("조건에 맞는 요소가 없습니다. 10분 후 페이지를 새로고침합니다.");
 				setTimeout(() => {
@@ -99,7 +113,7 @@
 		}
 	}
 
-	// 페이지 로드가 완료되고 '5초 후에' 메인 로직을 실행합니다.
+	// 페이지 로드가 완료되고 5초 후에 메인 로직을 실행합니다.
 	window.addEventListener('load', () => {
 		console.log("페이지 로드 완료. 5초 후 스크립트를 시작합니다...");
 		setTimeout(main, START_DELAY);
