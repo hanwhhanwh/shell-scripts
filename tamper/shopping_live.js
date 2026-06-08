@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Shopping Live Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.2
-// @description  shopping-live.html에서는 요소 검사 및 클릭을, live-view.html에서는 15초 후 뒤로 가기를 수행합니다.
-// @author       You
+// @version      0.3
+// @description  5초 지연 실행, 10초 후 안전한 뒤로가기, live-view.html에서 3초마다 로그 출력을 수행합니다.
+// @author       hbesthee@naver.com
 // @match        *://*/*shopping-live.html*
 // @match        *://*/*live-view.html*
 // @grant        none
@@ -15,7 +15,9 @@
 	// 상수 정의
 	const TARGET_BADGE = "imgs/badge/badge_after.svg";
 	const REFRESH_INTERVAL = 10 * 60 * 1000; // 10분 (밀리초)
-	const BACK_INTERVAL = 15 * 1000;         // 15초 (밀리초)
+	const BACK_INTERVAL = 10 * 1000;         // 10초 (밀리초)
+	const LOG_INTERVAL = 3 * 1000;           // 3초 (밀리초)
+	const START_DELAY = 5 * 1000;            // 5초 지연 (밀리초)
 
 	/**
 	 * 특정 선택자로 요소를 찾아 내부 이미지의 src를 검사하고 클릭 이벤트를 발생시킵니다.
@@ -29,7 +31,6 @@
 		elms.forEach((elm) => {
 			const img = elm.querySelector('img');
 			if (img) {
-				// getAttribute('src')를 사용하여 HTML에 작성된 상대 경로 그대로 비교합니다.
 				const srcValue = img.getAttribute('src');
 				if (srcValue !== TARGET_BADGE) {
 					elm.click();
@@ -42,21 +43,46 @@
 	}
 
 	/**
-	 * 메인 실행 함수
+	 * 안전한 뒤로가기 수행 함수
+	 * 이동할 수 있는 이전 히스토리가 있으면 뒤로 가고, 없으면 메인 쇼핑 페이지로 이동합니다.
+	 */
+	function safeBack() {
+		if (document.referrer && window.history.length > 1) {
+			window.history.back();
+		} else {
+			// 이전 기록이 없는 경우 안전하게 메인 주소로 이동 (도메인 고유 주소에 맞게 수정 가능)
+			window.location.href = "shopping-live.html";
+		}
+	}
+
+	/**
+	 * 메인 실행 함수 (페이지 로드 5초 후 호출됨)
 	 */
 	function main() {
 		const currentUrl = window.location.href;
 
-		// 1. live-view.html 주소인 경우: 15초 후 뒤로 가기
+		// 1. live-view.html 주소인 경우
 		if (currentUrl.includes('live-view.html')) {
-			console.log("live-view.html 감지: 15초 후 이전 페이지로 이동합니다.");
+			let logCount = 0;
+			console.log("live-view.html 감지: 10초 후 안전한 뒤로 가기를 수행합니다.");
+
+			// 3초마다 출력 횟수와 현재 시각 출력하는 타이머
+			const logTimer = setInterval(() => {
+				logCount++;
+				const currentTime = new Date().toLocaleTimeString();
+				console.log(`[로그 ${logCount회}] 현재 시각: ${currentTime}`);
+			}, LOG_INTERVAL);
+
+			// 10초 후 뒤로가기 실행 및 주기적 로그 타이머 제거
 			setTimeout(() => {
-				history.back();
+				clearInterval(logTimer);
+				safeBack();
 			}, BACK_INTERVAL);
+			
 			return; // live-view 로직 수행 후 종료
 		}
 
-		// 2. shopping-live.html 주소인 경우: 기존 리스트 검사 로직 수행
+		// 2. shopping-live.html 주소인 경우
 		if (currentUrl.includes('shopping-live.html')) {
 			const clickedOnAir = processElements('#onair-list .list-item');
 			const clickedEndList = processElements('#end-list .comming-list-thumb');
@@ -73,6 +99,9 @@
 		}
 	}
 
-	// 페이지 로드 완료 시 실행
-	window.addEventListener('load', main);
+	// 페이지 로드가 완료되고 '5초 후에' 메인 로직을 실행합니다.
+	window.addEventListener('load', () => {
+		console.log("페이지 로드 완료. 5초 후 스크립트를 시작합니다...");
+		setTimeout(main, START_DELAY);
+	});
 })();
