@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Shopping Live Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.6
-// @description  URL 매칭 조건 강화, 강력 새로고침 타이머 및 남은 시간 표시 UI 추가
+// @version      0.7
+// @description  GM_setValue를 이용한 주소 기억 및 복구 로직 추가
 // @author       hbesthee@naver.com
 // @match        *://*/*shopping-live.html*
 // @match        *://*/*live-view.html*
 // @match        *://*.com/pc/main
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 (function() {
@@ -110,10 +111,21 @@
 	 * 이동 명령 이후 5초 주기의 강력 새로고침 타이머를 연달아 호출합니다.
 	 */
 	function safeBack() {
-		if (document.referrer && window.history.length > 1) {
+		const previousUrl = GM_getValue("previous_url");
+		if (previousUrl) {
+			const datetime = new Date()
+				.toISOString()
+				.replace(/[-:T]/g, "")
+				.slice(0, 14);
+			const url = new URL(previousUrl)
+			url.searchParams.set('cache_bust', datetime);
+			console.log(`기억된 이전 주소로 이동합니다: ${url}`);
+			window.location.href = url.toString();
+		} else if (document.referrer && window.history.length > 1) {
+			console.log("기억된 주소가 없어 기본 브라우저 뒤로가기를 수행합니다.");
 			window.history.back();
 		} else {
-			console.log(`이전 기록이 없어 지정된 주소로 이동합니다: ${FALLBACK_URL}`);
+			console.log(`이전 기록이 없어 지정된 메인 주소로 이동합니다: ${FALLBACK_URL}`);
 			window.location.href = FALLBACK_URL;
 		}
 		// 이동 명령 직후 5초 강력 새로고침 바인딩
