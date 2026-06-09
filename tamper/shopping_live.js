@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Shopping Live Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.7
-// @description  GM_setValue를 이용한 주소 기억 및 복구 로직 추가
+// @version      0.8
+// @description  GM_setValue를 이용한 주소 기억 및 복구 로직 추가 + ready-list 및 note.html 대응
 // @author       hbesthee@naver.com
 // @match        *://*/*shopping-live.html*
 // @match        *://*/*live-view.html*
+// @match        *://*/*note.html*
 // @match        *://*.com/pc/main
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -161,7 +162,25 @@
 			return;
 		}
 
-		// 2. /pc/main 으로 끝나는 경우 (단순 포함이 아닌 최종 경로 매칭)
+		// 2. note.html 주소인 경우 (새로 추가된 로직)
+		if (currentUrl.includes('note.html')) {
+			console.log("note.html 감지: 버튼 항목 탐색 후 클릭을 시도합니다.");
+			const targetBtn = document.querySelector('.button-box .cta-btn');
+			
+			if (targetBtn) {
+				console.log("대상 버튼을 찾았습니다:", targetBtn);
+				targetBtn.click();
+			} else {
+				console.log("버튼을 찾지 못했습니다.");
+			}
+
+			// 클릭 여부와 관계없이 5초 주기 강력 새로고침 실행
+			startForceRefreshInterval();
+
+			return;
+		}
+
+		// 3. /pc/main 으로 끝나는 경우 (단순 포함이 아닌 최종 경로 매칭)
 		if (urlPath.endsWith('/pc/main')) {
 			console.log("/pc/main 매치 성공: '쇼핑라이브 보고' 링크를 탐색합니다.");
 			const elms = document.querySelectorAll("a");
@@ -179,16 +198,17 @@
 			return;
 		}
 
-		// 3. shopping-live.html 주소인 경우
+		// 4. shopping-live.html 주소인 경우
 		if (currentUrl.includes('shopping-live.html')) {
 			const clickedOnAir = processElements('#onair-list .list-item');
 			const clickedEndList = processElements('#end-list .comming-list-thumb');
+			const clickedReadyList = processElements('#ready-list .comming-list-thumb');
 
-			if (!clickedOnAir && !clickedEndList) {
+			if (!clickedOnAir && !clickedEndList && !clickedReadyList) {
 				console.log("조건에 맞는 요소가 없습니다. 10분 후 페이지를 새로고침합니다.");
 				updateRemainTimerUI(REFRESH_INTERVAL);
 				setTimeout(() => {
-					startForceRefreshInterval(); // 일반 reload 대신 강력 새로고침 적용
+					forceRefresh(); // 일반 reload 대신 강력 새로고침 적용
 				}, REFRESH_INTERVAL);
 			} else {
 				console.log("조건에 맞는 요소를 찾아 클릭 이벤트를 수행했습니다.");
