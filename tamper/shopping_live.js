@@ -200,6 +200,7 @@
 
 		// 4. shopping-live.html 주소인 경우
 		if (currentUrl.includes('shopping-live.html')) {
+			GM_setValue("previous_url", currentUrl);
 			const clickedOnAir = processElements('#onair-list .list-item');
 			const clickedEndList = processElements('#end-list .comming-list-thumb');
 			const clickedReadyList = processElements('#ready-list .comming-list-thumb');
