@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SuperToday Auto Clicker
 // @namespace    http://tampermonkey.net/
-// @version      0.6
+// @version      0.7
 // @description  이벤트 자동 응모하기 - bo_v_img 내 링크 배열 저장 후 새 창 열기
 // @author       hbesthee@naver.com
 // @match        https://www.suto.co.kr/ztech/*
@@ -27,20 +27,23 @@
 
 			// Save all href attributes to array
 			if (href.includes('naver.com') || href.includes('naverpay')) {
-				hrefArray.push(href);
+				if (hrefArray[hrefArray.length-1] != href) {
+					hrefArray.push(href);
+					console.log(`[Link href] ${href}`);
+				}
 			}
 			// If href contains "/bbs/link.php", save the text content to console
 			else if (href.includes('/bbs/link.php')) {
 				const text = aTag.innerText.trim();
-				if (text.startsWith('https://')) {
+				if (text.startsWith('https://') && (hrefArray[hrefArray.length-1] != text)) {
 					hrefArray.push(text);
-					console.log(`[Link Text] ${text} -> ${href}`);
+					console.log(`[Link Text] ${href} -> ${text}`);
 				}
 			}
 		});
 	});
 
-	console.log('Href Array:', hrefArray);
+	// console.log('Href Array:', hrefArray);
 
 	// Open all href links in new tabs with 1 second intervals
 	let currentIndex = 0;
