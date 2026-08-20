@@ -123,7 +123,7 @@
 		return `export DAUM_BASE="${DAUM_BASE}" ; \\\n`
 					+ `export YA_BASE="${YA_BASE}" ; \\\n`
 					+ `curl -K "\${HOME}/.conf/ym.conf" \\\n`
-					+ wgetCommands.join(' \\\n');
+					+ wgetCommands.join(' \\\n') + " \\\n";
 	}
 
 
