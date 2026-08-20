@@ -212,7 +212,7 @@
 			console.log('주문 상세내역을 찾을 수 없습니다.');
 			return;
 		} else {
-			markdownString += `## ${formattedDate} : 네이버샵(${orderInfo.shop_name}) : ${orderInfo.total_pay} (네이버페이 ; 신한더모아) ; \n\n`;
+			markdownString += `## ${formattedDate} : 네이버샵(${orderInfo.shop_name}) : ${orderInfo.total_pay} (네이버페이 ; 국민카드) ; \n\n`;
 			markdownString += `| 주문번호 | 주문금액 | 상품금액 | 할인금액 | 페이 포인트 | 배송비 | 결제금액 |\n`;
 			markdownString += `|---|---:|---:|---:|---:|---:|---:|\n`;
 			markdownString += `| [${orderInfo.order_no}](https://order.pay.naver.com/orderStatus/${orderInfo.order_no}) `;
