@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.8
+// @version      v1.1.10
 // @date         2025-08-13
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
@@ -17,6 +17,7 @@
 
 	const DAUM_BASE = 'https://attach.mail.daum.net/bigfile/v1/urls';
 	const YA_BASE = 'https://www.ya-moon.com/newboard/yamoonboard/admin-board/download.asp?fullboardname=';
+	const YA_REFERER = 'https://www.ya-moon.com/newboard/yamoonboard/board-read.asp?fullboardname=';
 	'use strict';
 
 
@@ -58,12 +59,15 @@
 	/**
 	 * HTML 엘리먼트의 ID를 받아 해당 엘리먼트의 내용에서 다운로드 가능한 파일 정보를 추출하여 wget 명령어를 생성합니다.
 	 * A 엘리먼트를 순회하며, createModifiedFilename() 함수를 통해 유효성이 확인된 파일에 대해서만 스크립트를 생성합니다.
-	 * @param {string} elementId - 내용을 추출할 HTML 엘리먼트의 ID (기본값: "read-content")
+	 * @param {string} elementId - 내용을 추출할 HTML 엘리먼트의 ID (기본값: "read-content") ; 내부적으로 무시함
 	 * @param {bool} isFilter - 다운로드 목록을 필터링 처리할지 여부 (기본값: true)
 	 * @returns {string} 생성된 wget 명령어 스크립트 문자열
 	 */
 	function generateDownloadScriptFromElement(elementId="read-content", isFilter=true) {
-		const targetElement = document.getElementById(elementId);
+		const container_div_selector = 'body > div.wrapper > div.container > div > div.col-md-9.mobile-fix > div.panel.panel-default';
+		const targetElement = document.querySelector(container_div_selector);
+
+		// const targetElement = document.getElementById(elementId);
 		const wgetCommands = [];
 
 		if (!targetElement || !targetElement.innerHTML) {
@@ -74,6 +78,7 @@
 		// 임시 DOM 파서 생성
 		const parser = new DOMParser();
 		const doc = parser.parseFromString(targetElement.innerHTML, 'text/html');
+		const referer = location.href.replace(YA_REFERER, '\${YA_REFERER}');
 		// 모든 <a> 엘리먼트를 순회
 		const allLinks = doc.querySelectorAll('a');
 
@@ -112,7 +117,8 @@
 			// createModifiedFilename 함수가 null을 반환하지 않았을 때만 스크립트 생성
 			if (modifiedFilename !== null && modifiedFilename !== '') {
 				if (!isKakao) {
-					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}"`);
+					const ts = Date.now();
+					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}&download_start=y&_dl=${ts}" -e "${referer}"`);
 				}
 				else {
 					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
@@ -122,6 +128,7 @@
 
 		return `export DAUM_BASE="${DAUM_BASE}" ; \\\n`
 					+ `export YA_BASE="${YA_BASE}" ; \\\n`
+					+ `export YA_REFERER="${YA_REFERER}" ; \\\n`
 					+ `curl -K "\${HOME}/.conf/ym.conf" \\\n`
 					+ wgetCommands.join(' \\\n') + " \\\n";
 	}
@@ -132,7 +139,8 @@
 	 * @param {string} contentId - 다운로드 스크립트 생성을 위해 내용을 추출할 div의 ID
 	 */
 	function addFilterdCopyButtonToDiv(contentId = "read-content") {
-		const containerDiv = document.querySelector('div.pull-left.margin-bottom--8');
+		const container_div_selector = 'div.pull-left.margin-bottom--8';
+		const containerDiv = document.querySelector(container_div_selector);
 		if (!containerDiv) {
 			console.error(`버튼을 추가할 컨테이너 div를 찾을 수 없습니다.`);
 			return;
