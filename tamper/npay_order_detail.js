@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         네이버페이 주문 상세내역 복사 스크립트
 // @namespace    http://www.hwh.kr/
-// @version      1.3
+// @version      1.3.1
+// @modified     2026-10-06
 // @description  네이버페이 주문 상세 페이지에서 주문 상세내역을 마크다운 형식으로 클립보드에 복사합니다.
 // @author       hbesthee@naver.com
 // @match        https://orders.pay.naver.com/order/status/*
@@ -79,6 +80,27 @@
 			}
 		}
 		return null;
+	}
+
+
+	/**
+	 * 상품 앵커의 href에서 실제 상품 주소를 꺼냅니다.
+	 * 네이버의 경유 주소는 https://inflow.pay.naver.com/rd?no=...&pType=P&retUrl=<인코딩된 상품 주소>&tr=ppc 형태입니다.
+	 * @param {string} href - 앵커의 href. DOM의 a.href는 &amp;가 이미 &으로 decode 된 상태입니다.
+	 * @param {string} fallback - 상품 주소를 얻지 못했을 때 반환할 값
+	 * @returns {string} 상품 주소 (없으면 fallback)
+	 */
+	function extractProductUrl(href, fallback) {
+		if (!href) {
+			return fallback;
+		}
+		// URLSearchParams.get()이 이미 percent-decode 하므로 decodeURIComponent를 겹쳐 쓰면 %25 등이 유실됩니다.
+		const retUrl = new URLSearchParams(href).get('retUrl');
+		if (retUrl) {
+			return retUrl;
+		}
+		// retUrl이 없는 경유 주소(/rd)는 쿠키·세션이 없으면 열리지 않으므로 정보 없음으로 취급합니다.
+		return href.includes('/rd?') ? fallback : href;
 	}
 
 
@@ -165,17 +187,18 @@
 		if (productInfoList.length !== 0) {
 			productInfoList.forEach( productInfoLi => {
 				let item_name = getElementInnerText(productInfoLi, 'strong', 'ProductDetail_name', '상품명').replace('상품명\n', '');
-				let urlEl = productInfoLi.querySelector('.ProductDetail_article__J6Izl a');
-				let url = urlEl && urlEl.href ? new URLSearchParams(urlEl.href).get('retUrl') : '';
+				// 클래스 접미사 해시(__IhUMX 등)는 빌드마다 바뀌므로 조이지 않고, retUrl을 실은 앵커를 먼저 찾습니다.
+				let urlEl = productInfoLi.querySelector('a[href*="retUrl="]')
+					|| getFirstElement(productInfoLi, 'a', 'ProductDetail_name-link', '상품 주소')
+					|| getFirstElement(productInfoLi, 'a', 'ProductDetail_thumb-image', '상품 이미지');
+				let url = extractProductUrl(urlEl ? urlEl.href : '', '정보 없음');
 				let countStr = getElementInnerText(productInfoLi, 'em', 'ProductDetail_highlight', '수량');
 				let count = parseInt(countStr.replace('개', ''), 10) || 0;
 				let single_price = getElementInnerText(productInfoLi, 'span', 'ProductDetail_price', '단가').replace('상품가격\n', '');
-				
-				const decodedUrl = url ? decodeURIComponent(url) : '정보 없음';
 
 				orderItems.push(new OrderItem(
 					item_name || '정보 없음',
-					decodedUrl,
+					url,
 					count,
 					single_price || '0원'
 				));

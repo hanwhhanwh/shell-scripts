@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.10
+// @version      v1.1.11
 // @date         2025-08-13
+// @modified     2026-10-06
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
 // @match        https://*/newboard/*
@@ -18,6 +19,9 @@
 	const DAUM_BASE = 'https://attach.mail.daum.net/bigfile/v1/urls';
 	const YA_BASE = 'https://www.ya-moon.com/newboard/yamoonboard/admin-board/download.asp?fullboardname=';
 	const YA_REFERER = 'https://www.ya-moon.com/newboard/yamoonboard/board-read.asp?fullboardname=';
+	const YM_CONF = '${HOME}/.conf/ym.conf';
+	const DAUM_CONF = '${HOME}/.conf/daum.conf';
+	const YA_SLEEP = 30;
 	'use strict';
 
 
@@ -68,7 +72,8 @@
 		const targetElement = document.querySelector(container_div_selector);
 
 		// const targetElement = document.getElementById(elementId);
-		const wgetCommands = [];
+		const yaCommands = [];
+		const daumCommands = [];
 
 		if (!targetElement || !targetElement.innerHTML) {
 			console.error(`ID가 "${elementId}"인 엘리먼트를 찾을 수 없거나 내용이 없습니다.`);
@@ -118,19 +123,35 @@
 			if (modifiedFilename !== null && modifiedFilename !== '') {
 				if (!isKakao) {
 					const ts = Date.now();
-					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}&download_start=y&_dl=${ts}" -e "${referer}"`);
+					yaCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}&download_start=y&_dl=${ts}" -e "${referer}"`);
 				}
 				else {
-					wgetCommands.push(` -o "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
+					daumCommands.push(` -o "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
 				}
 			}
 		});
 
-		return `export DAUM_BASE="${DAUM_BASE}" ; \\\n`
-					+ `export YA_BASE="${YA_BASE}" ; \\\n`
-					+ `export YA_REFERER="${YA_REFERER}" ; \\\n`
-					+ `curl -K "\${HOME}/.conf/ym.conf" \\\n`
-					+ wgetCommands.join(' \\\n') + " \\\n";
+		if (!yaCommands.length && !daumCommands.length) {
+			return "";
+		}
+
+		const lines = [
+			`export DAUM_BASE="${DAUM_BASE}" ; \\`,
+			`export YA_BASE="${YA_BASE}" ; \\`,
+			`export YA_REFERER="${YA_REFERER}" ; \\`,
+		];
+
+		yaCommands.forEach((cmd, i) => {
+			const last = i === yaCommands.length - 1;
+			const sep = !last ? ` ; sleep ${YA_SLEEP} ; \\` : (daumCommands.length ? ' ; \\' : ' \\');
+			lines.push(`curl -K "${YM_CONF}" \\`, cmd + sep);
+		});
+
+		if (daumCommands.length) {
+			lines.push(`curl -K "${DAUM_CONF}" \\`, ...daumCommands.map(cmd => cmd + ' \\'));
+		}
+
+		return lines.join('\n') + '\n';
 	}
 
 
