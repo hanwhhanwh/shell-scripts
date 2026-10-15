@@ -1,0 +1,141 @@
+name: www1
+
+# ---------------------------------------------------------------------------
+# www1 docker compose
+#
+# 값의 출처는 두 층으로 나뉩니다.
+#   .env              -> 이미지 태그/포트/호스트 경로. Compose 보간(${VAR})专用.
+#   .env.<service>    -> 해당 컨테이너에 실제로 주입되는 환경변수와 비밀값.
+#                        `env_file:`로 주입되며 Compose 보간에는 쓰이지 않습니다.
+# 두 파일 모두 비밀을 담을 수 있으므로 .gitignore 대상이고, 커밋되는 것은
+# .env.example / .env.<service>.example 템플릿뿐입니다.
+#
+# 이 구성은 2026-10-15 `docker inspect`로 뽑아낸 실행 중 컨테이너의 실제 값을
+# 그대로 옮긴 것입니다. 추정값이 아닙니다. 단, 아래는 의도적으로 다릅니다.
+#   * 이미지 태그를 새 버전으로 올림
+#   * redmine의 REDMINE_NO_DB_MIGRATE를 제거 (7.0.2는 db:migrate 필요,
+#     사본 dry-run에서 317->327 마이그레이션 성공을 확인함)
+#   * healthcheck 추가 (전부 실제 컨테이너/이미지에서 동작을 검증한 명령만 사용)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # host 네트워크 + 23306 포트. redmine이 172.17.0.1:23306으로 접근합니다.
+  mariadb:
+    image: mariadb:${MARIADB_TAG}
+    container_name: mariadb
+    restart: unless-stopped
+    network_mode: host
+    working_dir: /
+    env_file:
+      - .env.mariadb
+    volumes:
+      - ${MARIADB_DATA_DIR}:/var/lib/mysql
+    command: ["--port", "${MARIADB_PORT}"]
+    healthcheck:
+      # 이미지 동봉 공식 헬스체크. 실측 exit=0 확인.
+      test: ["CMD", "/usr/local/bin/healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      # 11.7.2 -> 12.3.3 첫 기동 시 entrypoint가 mariadb-upgrade를 돌리므로 여유 있게.
+      start_period: 600s
+
+  # host 네트워크. database.yml은 호스트에서 바인드 마운트되므로 컨테이너 쪽
+  # REDMINE_DB_* 보다 이 파일이 우선합니다.
+  redmine:
+    image: redmine:${REDMINE_TAG}
+    container_name: redmine
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env.redmine
+    volumes:
+      - ${REDMINE_FILES}:/usr/src/redmine/files
+      - ${REDMINE_LOGS}:/usr/src/redmine/log
+      - ${REDMINE_PLUGINS}:/usr/src/redmine/plugins
+      - ${REDMINE_DATA}:/usr/src/redmine/public/data
+      - ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb
+      - ${REDMINE_DB_CONFIG}:/usr/src/redmine/config/database.yml
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      # 실측: wget -> HTML 200 (현재 6.0.5 컨테이너에서 확인)
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${REDMINE_PORT}/ >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+  # bridge 네트워크. rootless 이미지라 컨테이너 내부 UID/GID가 1000입니다.
+  # 이미지가 VOLUME /etc/gitea 를 선언하므로 익명 볼륨이 하나 생깁니다.
+  # app.ini는 그 안으로 바인드 마운트되며, 이는 기존 docker run과 동일 동작입니다.
+  gitea:
+    image: gitea/gitea:${GITEA_TAG}
+    container_name: gitea
+    restart: unless-stopped
+    env_file:
+      - .env.gitea
+    ports:
+      - "${GITEA_HTTP_PORT}:3000"
+      - "${GITEA_SSH_PORT}:2222"
+    volumes:
+      - ${GITEA_DATA_DIR}:/var/lib/gitea
+      - ${GITEA_DATA_DIR}/app.ini:/etc/gitea/app.ini
+    healthcheck:
+      # 실측: {"status":"pass", checks:{cache:ping, database...}} 반환 확인
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/healthz >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # 443 바인드는 unprivileged port sysctl이 필요합니다.
+  haproxy:
+    image: haproxy:${HAPROXY_TAG}
+    container_name: haproxy
+    restart: unless-stopped
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    env_file:
+      - .env.haproxy
+    ports:
+      - "${HAPROXY_PORT}:${HAPROXY_PORT}/tcp"
+    volumes:
+      - ${HAPROXY_DATA_DIR}/conf:/usr/local/etc/haproxy:ro
+      - ${HAPROXY_DATA_DIR}/lib:/var/lib/haproxy
+    healthcheck:
+      # 실측: nc -z 127.0.0.1 443 -> exit 0, 닫힌 9999 -> exit 1 (음성 대조군 확인)
+      # 참고: socat은 3.2.3-alpine 에 없고 3.2.26-alpine 에 있으므로 쓰지 않습니다.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 ${HAPROXY_PORT}"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 실행 중 구성을 그대로 유지합니다. 저장소 스크립트에 2025-11-11 추가됐으나
+  # 한 번도 배포되지 않은 PEERDNS / ALLOWEDIPS 는 의도적으로 넣지 않았습니다.
+  # (넣으면 피어 5개가 풀 터널로 전환됩니다)
+  wireguard:
+    image: linuxserver/wireguard:${WIREGUARD_TAG}
+    container_name: wireguard
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: "1"
+    env_file:
+      - .env.wireguard
+    ports:
+      - "${WIREGUARD_PORT}:${WIREGUARD_PORT}/udp"
+    volumes:
+      - ${WIREGUARD_DATA_DIR}/config:/config
+    healthcheck:
+      # 실측: wg show wg0 listen-port -> 51820, ip link -> UP
+      test: ["CMD-SHELL", "wg show wg0 listen-port >/dev/null 2>&1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
