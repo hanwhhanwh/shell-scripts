@@ -7,21 +7,23 @@
 
 CONTAINER_NAME=redmine
 LOG_REDMINE=/home/logs/redmine.log
-REDMINE_FILES=/home/redmine/files
-REDMINE_LOG_CONFIG=/home/redmine/config/additional_environment.rb
-REDMINE_DB_CONFIG=/home/redmine/config/database.yml
-REDMINE_LOGS=/home/redmine/logs
-REDMINE_PLUGINS=/home/redmine/plugins
-EXTERNAL_DATA=/home/redmine/data
-REDMINE_PORT=3000
-#REDMINE_TAG=5.1.1-alpine3.18
-REDMINE_TAG=6.0.5-alpine3.21
-REDMINE_DB_HOST=172.17.0.1
-REDMINE_DB_PORT=23306
-REDMINE_DB_USERNAME=redmine
-REDMINE_DB_PASSWORD=redmine2019!@
-REDMINE_DB_DATABASE=redmine
 
+# 이미지 태그/포트/경로는 .env 에서, DB 접속정보(비밀번호 포함)는
+# .env.${CONTAINER_NAME} 에서 읽습니다.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env.${CONTAINER_NAME}"
+[ -f "${ENV_FILE}" ] || { echo "FATAL: ${ENV_FILE} 가 없습니다"; exit 1; }
+set -a
+[ -f "${SCRIPT_DIR}/.env" ] && . "${SCRIPT_DIR}/.env"
+. "${ENV_FILE}"
+set +a
+: "${REDMINE_TAG:?REDMINE_TAG 가 설정되지 않았습니다 (.env 확인)}"
+: "${REDMINE_FILES:?REDMINE_FILES 가 설정되지 않았습니다}"
+: "${REDMINE_LOG_CONFIG:?REDMINE_LOG_CONFIG 가 설정되지 않았습니다}"
+: "${REDMINE_DB_CONFIG:?REDMINE_DB_CONFIG 가 설정되지 않았습니다}"
+: "${REDMINE_LOGS:?REDMINE_LOGS 가 설정되지 않았습니다}"
+: "${REDMINE_PLUGINS:?REDMINE_PLUGINS 가 설정되지 않았습니다}"
+: "${REDMINE_DATA:?REDMINE_DATA 가 설정되지 않았습니다}"
 
 echo "========" | tee -a ${LOG_REDMINE}
 echo "[$(date +%Y-%m-%d) $(date +%H:%M:%S)] $0 $@" | tee -a ${LOG_REDMINE}
@@ -29,21 +31,17 @@ echo "[$(date +%Y-%m-%d) $(date +%H:%M:%S)] $0 $@" | tee -a ${LOG_REDMINE}
 echo "${CONTAINER_NAME} 컨테이너 중지" | tee -a ${LOG_REDMINE}
 docker ps -q --filter "name=${CONTAINER_NAME}" | grep -q . && docker stop ${CONTAINER_NAME} && docker rm -fv ${CONTAINER_NAME} && echo "'${CONTAINER_NAME}' container stopped."
 
-echo "${CONTAINER_NAME} 컨테이너 생성" | tee -a ${LOG_REDMINE}
+echo "${CONTAINER_NAME} 컨테이너 생성 (redmine:${REDMINE_TAG})" | tee -a ${LOG_REDMINE}
+# REDMINE_NO_DB_MIGRATE 는 .env.redmine 에서 통제합니다.
+# 6.0.x -> 7.0.x 는 스키마 마이그레이션이 필요하므로 비워 두어야 하며,
+# entrypoint 가 -z 로 판별하기 때문에 "=0" 으로 넣어도 건너뛰어집니다.
 	# -p {REDMINE_PORT}:3000 \
 docker run -d --network host --restart=unless-stopped --name ${CONTAINER_NAME} \
-	-e TZ=Asia/Seoul \
-	-e REDMINE_NO_DB_MIGRATE=1 \
-	-e REDMINE_DB_MYSQL=${REDMINE_DB_HOST} \
-	-e REDMINE_DB_PORT=${REDMINE_DB_PORT} \
-	-e REDMINE_DB_USERNAME=${REDMINE_DB_USERNAME} \
-	-e REDMINE_DB_PASSWORD=${REDMINE_DB_PASSWORD} \
-	-e REDMINE_DB_DATABASE=${REDMINE_DB_DATABASE} \
+	--env-file ${ENV_FILE} \
 	-v ${REDMINE_FILES}:/usr/src/redmine/files \
 	-v ${REDMINE_LOGS}:/usr/src/redmine/log \
 	-v ${REDMINE_PLUGINS}:/usr/src/redmine/plugins \
-	-v ${EXTERNAL_DATA}:/usr/src/redmine/public/data \
+	-v ${REDMINE_DATA}:/usr/src/redmine/public/data \
 	-v ${REDMINE_LOG_CONFIG}:/usr/src/redmine/config/additional_environment.rb \
 	-v ${REDMINE_DB_CONFIG}:/usr/src/redmine/config/database.yml \
 	redmine:${REDMINE_TAG} 2>&1 | tee -a ${LOG_REDMINE}
-	

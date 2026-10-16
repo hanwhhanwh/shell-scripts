@@ -1,3 +1,9 @@
 .tmp/
 www1/.conf/
 www1/haproxy/hwh.kr.pem
+
+# Compose 런타임 env (비밀값 포함) - 커밋되는 것은 .example 템플릿뿐
+www1/.env
+www1/.env.*
+!www1/.env.example
+!www1/.env.*.example
