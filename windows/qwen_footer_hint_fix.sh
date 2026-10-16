@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# qwen CLI footer에서 작업 중 표시되는 "Enter to steer · Ctrl+Q to queue" 문구를 제거한다.
+# qwen CLI footer의 2번째 줄(모드 표시 줄)이 작업 중에 사라지는 것을 막는다.
 #
-# 대상 코드 (v0.25.1 기준, 청크 이름의 해시 값은 빌드마다 바뀐다):
-#   chunks/startInteractiveUI-*.js  streamingState==="responding" 분기
-#       t("Enter to steer \xB7 Ctrl+Q to queue") + " \xB7 " + AutoAcceptIndicator
-#   chunks/start-opentui-ui-*.js    modeHint 배열의 streaming 분기 (web shell/opentui UI)
+# 하는 일 (v0.25.2 기준, 청크 이름의 해시 값은 빌드마다 바뀐다):
+#   1) 작업 중에만 붙는 "Enter to steer · Ctrl+Q to queue" 문구를 제거한다.
+#      chunks/startInteractiveUI-*.js  streamingState==="responding" 분기 (ink — 기본 렌더러)
+#      chunks/start-opentui-ui-*.js    modeHint 배열의 streaming 분기 (QWEN_TUI_RENDERER=opentui)
+#   2) footer 높이를 항상 2행으로 고정한다. ink는 빈 Text를 {width:0,height:0}으로 재므로
+#      (measureText) 내용이 비는 순간 하단 행이 0행으로 붕괴하고, statusLine은 우측 항목 폭이
+#      흔들릴 때마다 1↔2행으로 말린다. → 하단 행 Box minHeight:1, statusLine maxHeight:1 + truncate
 #
 # 사용법:
 #   qwen_footer_hint_fix.sh            실행에 관여하는 사본만 패치
@@ -28,7 +31,7 @@ for arg in "$@"; do
     restore)    MODE="restore" ;;
     apply)      MODE="apply" ;;
     --all|-a)   ALL=1 ;;
-    -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "알 수 없는 인수: $arg (status|restore|apply|--all)" >&2; exit 2 ;;
   esac
 done
@@ -105,8 +108,19 @@ const RULES = [
     new RegExp(`(?<!text:)t\\("Enter to steer ${SEP} Ctrl\\+Q to queue"\\),`, "g"), ""],
   ["ink 모드 문구 앞 구분자",
     new RegExp(`"\\s*${SEP}\\s*"\\s*,(\\(0,${RT}\\.jsx\\)\\(AutoAcceptIndicator)`, "g"), '"",$1'],
+  // ── footer 높이 고정 ────────────────────────────────────────────────────
+  // ink는 빈 Text를 {width:0,height:0}으로 잰다(measureText). 내용이 비는 순간 하단 행이
+  // 0행으로 붕괴하고, statusLine은 우측 항목(context 지표·pill) 폭이 바뀔 때마다 1↔2행으로
+  // 말린다. 둘 다 footer 높이를 흔들어 화면이 깜빡이므로 행 수를 고정한다.
+  ["ink 하단 행 minHeight",
+    new RegExp(`(Box_default,\\{flexDirection:"row",flexShrink:1,)(children:\\[\\(0,${RT}\\.jsx\\)\\(Text,\\{wrap:"truncate",children:leftBottomContent\\}\\))`, "g"),
+    "$1minHeight:1,$2"],
+  ["ink statusLine 단일 행", /maxHeight:MAX_STATUS_LINES/g, "maxHeight:1"],
+  ["ink statusLine 말림 금지", /wrap:"wrap",children:statusLineLines\.join/g,
+    'wrap:"truncate",children:statusLineLines.join'],
 ];
-const patchedRe = /t\("Enter to steer|\.\.\.streaming\?\[\{text:t\("Enter to steer/;
+// 규칙이 하나라도 맞으면 패치가 필요하다 — 문구를 이미 지운 사본에도 높이 고정 규칙이 남는다.
+const needsPatchOf = (src) => RULES.some(([, re]) => { re.lastIndex = 0; return re.test(src); });
 
 let failed = 0;
 for (const [label, root] of roots) {
@@ -126,10 +140,10 @@ for (const [label, root] of roots) {
     const bak = `${file}.bak`;
     const base = path.basename(file);
     const src = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    const needsPatch = patchedRe.test(src);
+    const needsPatch = needsPatchOf(src);
     const hasBak = fs.existsSync(bak);
     const mine = needsPatch || hasBak || src.includes("Enter to steer")
-      || /streamingState==="responding"|const modeHint=/.test(src);
+      || /streamingState==="responding"|const modeHint=|leftBottomContent/.test(src);
     if (!mine) continue;
     relevant++;
 
@@ -158,7 +172,8 @@ for (const [label, root] of roots) {
       applied.push(`${name} x${n}`);
     }
     if (!applied.length) {
-      const at = src.indexOf("Enter to steer");
+      const at = ["Enter to steer", "maxHeight:MAX_STATUS_LINES", "leftBottomContent"]
+        .map((m) => src.indexOf(m)).find((i) => i >= 0) ?? 0;
       console.error(`  ${base} : 패턴 불일치 — 빌드가 바뀌었습니다. 수동 확인 필요`);
       console.error(`    ${JSON.stringify(src.slice(Math.max(0, at - 140), at + 180))}`);
       failed++;
