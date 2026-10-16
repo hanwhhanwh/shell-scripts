@@ -8,6 +8,10 @@
 #   2) footer 높이를 항상 2행으로 고정한다. ink는 빈 Text를 {width:0,height:0}으로 재므로
 #      (measureText) 내용이 비는 순간 하단 행이 0행으로 붕괴하고, statusLine은 우측 항목 폭이
 #      흔들릴 때마다 1↔2행으로 말린다. → 하단 행 Box minHeight:1, statusLine maxHeight:1 + truncate
+#   3) 본문이 자랄 때 직전 프레임이 잔상으로 남는 깜빡임을 잡는다. 번들 ink log-update가 행 수를
+#      논리 행(split("\n").length)으로 세서 말린 행만큼 덜 지우기 때문 → 물리 행 수·커서 y 보정
+#   4) mintty에서 프레임 도중 구 화면이 비치던 경로를 끈다 — DEC 2026 synchronized output을
+#      비활성화(shouldSynchronize→false). 종전에는 TTY이면 무조건 켜지던 값이다.
 #
 # 사용법:
 #   qwen_footer_hint_fix.sh            실행에 관여하는 사본만 패치
@@ -31,7 +35,7 @@ for arg in "$@"; do
     restore)    MODE="restore" ;;
     apply)      MODE="apply" ;;
     --all|-a)   ALL=1 ;;
-    -h|--help)  sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "알 수 없는 인수: $arg (status|restore|apply|--all)" >&2; exit 2 ;;
   esac
 done
@@ -118,6 +122,32 @@ const RULES = [
   ["ink statusLine 단일 행", /maxHeight:MAX_STATUS_LINES/g, "maxHeight:1"],
   ["ink statusLine 말림 금지", /wrap:"wrap",children:statusLineLines\.join/g,
     'wrap:"truncate",children:statusLineLines.join'],
+  // ── log-update 물리 행 수식 ─────────────────────────────────────────────
+  // 번들 ink의 log-update는 프레임 행 수를 str.split("\n").length(논리 행)로 세서
+  // eraseLines(논리 행)만큼만 지운다. 터미널 폭에서 말린 행은 물리 2행이라 지우기가 항상
+  // 부족해지고 직전 프레임이 잔상으로 남는다(본문이 자랄 때만 깜빡이는 증상). 커서 복귀
+  // 수식도 같은 값을 쓰므로, 물리 행 수와 커서 y를 함께 보정한다.
+  ["ink log-update 물리 행 헬퍼",
+    /const activeCursor=consumeActiveCursor\(\);cursorDirty=false;/g,
+    'const activeCursor=consumeActiveCursor();'
+    + 'const __pc=stream.columns||80;'
+    + 'const __w=__l=>typeof widestLine==="function"?widestLine(__l):__l.replace(/\\x1b\\[[0-9;]*m/g,"").length;'
+    + 'const __pr=__l=>Math.max(1,Math.ceil(__w(__l)/__pc));'
+    + 'const __phys=__s=>__s.split("\\n").reduce((n,l)=>n+__pr(l),0);'
+    + 'if(activeCursor){let __y=0;const __ls=str.split("\\n");'
+    + 'for(let __i=0;__i<activeCursor.y&&__i<__ls.length;__i++)__y+=__pr(__ls[__i]);activeCursor.y=__y}'
+    + 'cursorDirty=false;'],
+  ["ink log-update visibleCount 물리 행",
+    /const lines=str\.split\("\\n"\);const visibleCount=visibleLineCount\(lines,str\);/g,
+    'const lines=str.split("\\n");const visibleCount=str.endsWith("\\n")?__phys(str)-1:__phys(str);'],
+  ["ink log-update previousLineCount 물리 행",
+    /previousLineCount=lines\.length;previousHasTrailingNewline=hasTrailingNewline/g,
+    'previousLineCount=__phys(str);previousHasTrailingNewline=hasTrailingNewline'],
+  // mintty에서 DEC 2026(synchronized output) 처리가 온전치 않으면 프레임 도중 구 화면이
+  // 잠시 보여 깜빡임으로 보인다. TTY면 무조건 켜지므로 끈다.
+  ["ink synchronized output 비활성",
+    /function shouldSynchronize\(stream,interactive\)\{return"isTTY"in stream&&stream\.isTTY&&\(interactive\?\?!is_in_ci_default\)\}/g,
+    'function shouldSynchronize(stream,interactive){return false}'],
 ];
 // 규칙이 하나라도 맞으면 패치가 필요하다 — 문구를 이미 지운 사본에도 높이 고정 규칙이 남는다.
 const needsPatchOf = (src) => RULES.some(([, re]) => { re.lastIndex = 0; return re.test(src); });
@@ -131,7 +161,7 @@ for (const [label, root] of roots) {
 
   const chunks = path.join(root, "chunks");
   const cands = fs.readdirSync(chunks)
-    .filter((f) => /^start.*\.js$/.test(f))
+    .filter((f) => /^(start.*|chunk-.*)\.js$/.test(f))
     .map((f) => path.join(chunks, f));
 
   // ink 변형은 t("…") 호출째 사라지므로, 마커 문자열 유무만으로는 "패치됨"을 못区分한다.
@@ -143,7 +173,7 @@ for (const [label, root] of roots) {
     const needsPatch = needsPatchOf(src);
     const hasBak = fs.existsSync(bak);
     const mine = needsPatch || hasBak || src.includes("Enter to steer")
-      || /streamingState==="responding"|const modeHint=|leftBottomContent/.test(src);
+      || /streamingState==="responding"|const modeHint=|leftBottomContent|previousLineCount=lines\.length/.test(src);
     if (!mine) continue;
     relevant++;
 
