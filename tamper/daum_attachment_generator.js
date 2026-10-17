@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.11
+// @version      v1.1.12
 // @date         2025-08-13
-// @modified     2026-10-06
+// @modified     2026-10-16
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
 // @match        https://*/newboard/*
@@ -57,6 +57,19 @@
 		newFilename += extension;
 
 		return newFilename;
+	}
+
+
+	/**
+	 * 다음(daum) 첨부파일 1건에 대한 curl 파일 지정 인수 문자열을 생성합니다.
+	 * 저장 파일명의 확장자가 .mkv 이면 .mp4 로 바꿉니다.
+	 * @param {string} filename - 저장할 파일명
+	 * @param {string} url - 첨부파일 URL
+	 * @returns {string} curl 명령어 뒤에 이어 붙이는 인수 문자열 (앞쪽 공백 포함)
+	 */
+	function createDaumDownloadArgs(filename, url) {
+		const savedFilename = filename.replace(/\.mkv$/i, '.mp4');
+		return ` -o "${savedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`;
 	}
 
 
@@ -126,7 +139,7 @@
 					yaCommands.push(` -o "${modifiedFilename}" "${url.replace(YA_BASE, '\${YA_BASE}')}&download_start=y&_dl=${ts}" -e "${referer}"`);
 				}
 				else {
-					daumCommands.push(` -o "${modifiedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`);
+					daumCommands.push(createDaumDownloadArgs(modifiedFilename, url));
 				}
 			}
 		});
@@ -144,7 +157,7 @@
 		yaCommands.forEach((cmd, i) => {
 			const last = i === yaCommands.length - 1;
 			const sep = !last ? ` ; sleep ${YA_SLEEP} ; \\` : (daumCommands.length ? ' ; \\' : ' \\');
-			lines.push(`curl -K "${YM_CONF}" \\`, cmd + sep);
+			lines.push(`curl -K "${YM_CONF}"` + cmd + sep);
 		});
 
 		if (daumCommands.length) {
