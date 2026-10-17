@@ -8,16 +8,25 @@
 #   2) footer 높이를 항상 2행으로 고정한다. ink는 빈 Text를 {width:0,height:0}으로 재므로
 #      (measureText) 내용이 비는 순간 하단 행이 0행으로 붕괴하고, statusLine은 우측 항목 폭이
 #      흔들릴 때마다 1↔2행으로 말린다. → 하단 행 Box minHeight:1, statusLine maxHeight:1 + truncate
-#   3) 본문이 자랄 때 직전 프레임이 잔상으로 남는 깜빡임을 잡는다. 번들 ink log-update가 행 수를
-#      논리 행(split("\n").length)으로 세서 말린 행만큼 덜 지우기 때문 → 물리 행 수·커서 y 보정
-#   4) mintty에서 프레임 도중 구 화면이 비치던 경로를 끈다 — DEC 2026 synchronized output을
-#      비활성화(shouldSynchronize→false). 종전에는 TTY이면 무조건 켜지던 값이다.
+#   3) DEC 2026 synchronized output 비활성은 **opt-in**이다(QWEN_EXTRA). 2026-10-16 실측: 이것을
+#      끄면 매 프레임 다시 그리기가 원자적이지 않게 되어 중앙 본문 깜빡임이 보인다.
+#   4) Ink를 incremental 렌더링으로 띄운다. mintty 3.8.1은 DEC 2026을 지원하지 않아(DECRQM 0) 프레임마다
+#      전 행 지우기→다시 그리기가 그대로 보인다(화면 떨림·맨 아래 줄 사라짐). 바뀐 행만 덮어쓰면 사라진다.
+#   5) 스피너 줄의 "(시간 · 토큰 · esc to cancel)"을 말지 않고 자른다. 2행이 되면 프레임이 화면 높이를
+#      넘어 Ink가 매 프레임 화면 전체를 지운다(clearTerminal).
+#   화면 겹침(잔상)은 패치가 아니라 설정으로 막는다: ~/.qwen/settings.json ui.showScrollbar=false.
+#   스크롤바가 마지막 열에 그려지면 ConPTY(conhost)가 즉시 줄을 넘겨 프레임이 밀린다(2026-10-17 재현).
+#   평가 창(ui.enableUserFeedback=false)도 화면 높이를 넘겨 clearTerminal을 부르므로 끈다.
 #
 # 사용법:
 #   qwen_footer_hint_fix.sh            실행에 관여하는 사본만 패치
 #   qwen_footer_hint_fix.sh status     패치 여부만 확인 (파일에 손대지 않는다)
 #   qwen_footer_hint_fix.sh restore    .bak 원본으로 되돌린다
 #   qwen_footer_hint_fix.sh --all      ~/.qwen/updates의 모든 버전 사본까지 처리
+#   QWEN_EXTRA="규칙명,…"              opt-in 규칙을 포함한다 (예: ink synchronized output 비활성)
+#   QWEN_SKIP="규칙명,…"               특정 규칙을 제외한다 (원인 분리 A/B용)
+#   apply는 입력 시그니처(버전+청크 파일 이름+적용 규칙)가 ~/.qwen/footer_hint_fix.state와 같으면
+#   본문 스캔을 건너뛴다 — 시작 랩퍼/훅에서 매번 호출해도 비용이 없도록.
 #
 # 사본 찾는 곳 (경로 탐색·정렬은 전부 node에서 한다 — MSYS 경로 변환 문제 회피):
 #   %APPDATA%\npm\node_modules\@qwen-code\qwen-code          qwen.cmd가 exec하는 런처
@@ -35,7 +44,7 @@ for arg in "$@"; do
     restore)    MODE="restore" ;;
     apply)      MODE="apply" ;;
     --all|-a)   ALL=1 ;;
-    -h|--help)  sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,36p' "$0"; exit 0 ;;
     *) echo "알 수 없는 인수: $arg (status|restore|apply|--all)" >&2; exit 2 ;;
   esac
 done
@@ -99,6 +108,22 @@ else if (found[0]) roots.push([`updates ${found[0][0]} (최신)`, found[0][1]]);
 
 if (!roots.length) { console.error("qwen 설치 경로(chunks)를 찾지 못했습니다."); process.exit(1); }
 
+// ── 고속  ────────────────────────────────────────────────────────────────
+// 입력 시그니처(버전 + 청크 파일 이름 목록)가 직전 apply와 같으면 본문 스캔을 건너뛴다.
+// qwen 시작 랩퍼/훅에서 매번 호출해도 비용이 없도록 한다. 자가업데이트·npm 재설치는
+// 청크 파일 이름의 해시가 바뀌므로 시그니처가 변한다. restore는 상태를 무효화한다.
+const sig = roots.map(([label, root]) => {
+  let ver = "?";
+  try { ver = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version; } catch { /* 없음 */ }
+  let names = [];
+  try {
+    names = fs.readdirSync(path.join(root, "chunks"))
+      .filter((f) => /^(start.*|chunk-.*)\.js$/.test(f)).sort();
+  } catch { /* 없음 */ }
+  return `${label}@${ver}:${names.join(",")}`;
+}).join("|");
+const STATE = path.join(HOME, ".qwen", "footer_hint_fix.state");
+
 // ── 패치 규칙 ────────────────────────────────────────────────────────────────
 // 청크 안의 구분자는 리터럴 "\xB7"(백슬래시+x+B+7) 또는 실제 '·' 문자로 적힌다.
 const SEP = String.raw`(?:\\xB7|\u00b7)`;
@@ -122,35 +147,42 @@ const RULES = [
   ["ink statusLine 단일 행", /maxHeight:MAX_STATUS_LINES/g, "maxHeight:1"],
   ["ink statusLine 말림 금지", /wrap:"wrap",children:statusLineLines\.join/g,
     'wrap:"truncate",children:statusLineLines.join'],
-  // ── log-update 물리 행 수식 ─────────────────────────────────────────────
-  // 번들 ink의 log-update는 프레임 행 수를 str.split("\n").length(논리 행)로 세서
-  // eraseLines(논리 행)만큼만 지운다. 터미널 폭에서 말린 행은 물리 2행이라 지우기가 항상
-  // 부족해지고 직전 프레임이 잔상으로 남는다(본문이 자랄 때만 깜빡이는 증상). 커서 복귀
-  // 수식도 같은 값을 쓰므로, 물리 행 수와 커서 y를 함께 보정한다.
-  ["ink log-update 물리 행 헬퍼",
-    /const activeCursor=consumeActiveCursor\(\);cursorDirty=false;/g,
-    'const activeCursor=consumeActiveCursor();'
-    + 'const __pc=stream.columns||80;'
-    + 'const __w=__l=>typeof widestLine==="function"?widestLine(__l):__l.replace(/\\x1b\\[[0-9;]*m/g,"").length;'
-    + 'const __pr=__l=>Math.max(1,Math.ceil(__w(__l)/__pc));'
-    + 'const __phys=__s=>__s.split("\\n").reduce((n,l)=>n+__pr(l),0);'
-    + 'if(activeCursor){let __y=0;const __ls=str.split("\\n");'
-    + 'for(let __i=0;__i<activeCursor.y&&__i<__ls.length;__i++)__y+=__pr(__ls[__i]);activeCursor.y=__y}'
-    + 'cursorDirty=false;'],
-  ["ink log-update visibleCount 물리 행",
-    /const lines=str\.split\("\\n"\);const visibleCount=visibleLineCount\(lines,str\);/g,
-    'const lines=str.split("\\n");const visibleCount=str.endsWith("\\n")?__phys(str)-1:__phys(str);'],
-  ["ink log-update previousLineCount 물리 행",
-    /previousLineCount=lines\.length;previousHasTrailingNewline=hasTrailingNewline/g,
-    'previousLineCount=__phys(str);previousHasTrailingNewline=hasTrailingNewline'],
   // mintty에서 DEC 2026(synchronized output) 처리가 온전치 않으면 프레임 도중 구 화면이
   // 잠시 보여 깜빡임으로 보인다. TTY면 무조건 켜지므로 끈다.
+  // 단, 2026-10-16 실측: 이 규칙을 끄면 매 프레임 다시 그리기가 원자적이지 않게 되어
+  // **중앙 본문 깜빡임**이 보인다. 그래서 기본 제외(opt-in) — 필요 시 QWEN_EXTRA="ink synchronized output 비활성".
+  // mintty 3.8.1은 DEC 2026을 모른다(DECRQM ?2026 → 0, 2026-10-17 실측). 그래서 BSU/ESU가 무시되고,
+  // 기본 log-update가 매 프레임 전 행을 지운 뒤 다시 그리는 과정이 그대로 보인다(가상화 이력 모드는
+  // 프레임이 화면 전체라 화면 전체가 떨리고, 맨 아래 행이 가장 먼저 지워져 가장 늦게 그려진다).
+  // incremental 모드는 바뀐 행만 덮어써 중간 빈 화면이 없다.
+  // 스피너 줄의 "(시간 · 토큰 · esc to cancel)"는 기본 wrap이라 폭을 넘으면 2행이 된다. 가상화 이력
+  // 모드는 프레임이 화면 높이에 딱 맞춰져 있어 1행만 늘어도 overflow → Ink가 매 프레임
+  // clearTerminal(2J+3J)로 전체를 다시 그린다(2026-10-17 실측: 15초간 370회). 앞의 primaryText처럼 자른다.
+  ["ink 스피너 줄 말림 금지",
+    /(Text,\{color:theme\.text\.secondary,)(children:\[" ",cancelAndTimerContent\]\})/g,
+    '$1wrap:"truncate-end",$2'],
+  ["ink incremental 렌더링",
+    /(isScreenReaderEnabled:config\.getScreenReader\(\),alternateScreen:useVP,)(?!incrementalRendering)/g,
+    "$1incrementalRendering:true,"],
   ["ink synchronized output 비활성",
     /function shouldSynchronize\(stream,interactive\)\{return"isTTY"in stream&&stream\.isTTY&&\(interactive\?\?!is_in_ci_default\)\}/g,
     'function shouldSynchronize(stream,interactive){return false}'],
 ];
+// opt-in 규칙은 QWEN_EXTRA로 포함, QWEN_SKIP으로 제외 — 원인 분리 A/B용.
+const OPTIN = new Set(["ink synchronized output 비활성"]);
+const EXTRA = new Set((process.env.QWEN_EXTRA || "").split(",").map((s) => s.trim()).filter(Boolean));
+const SKIP = new Set((process.env.QWEN_SKIP || "").split(",").map((s) => s.trim()).filter(Boolean));
+const EFFECTIVE = RULES.filter(([name]) => !SKIP.has(name) && (!OPTIN.has(name) || EXTRA.has(name)));
+// 시그니처에 적용 규칙 목록도 넣는다 — 규칙이 추가·제외되면 같은 청크라도 다시 스캔해야 한다.
+const SIG = `${sig}#${EFFECTIVE.map(([name]) => name).join(",")}`;
+if (MODE === "restore") { try { fs.unlinkSync(STATE); } catch { /* 없음 */ } }
+if (MODE === "apply") {
+  let prev = "";
+  try { prev = fs.readFileSync(STATE, "utf8"); } catch { /* 없음 */ }
+  if (prev === SIG) { console.log("입력 시그니처 동일 — 건너뜀 (state 일치)"); process.exit(0); }
+}
 // 규칙이 하나라도 맞으면 패치가 필요하다 — 문구를 이미 지운 사본에도 높이 고정 규칙이 남는다.
-const needsPatchOf = (src) => RULES.some(([, re]) => { re.lastIndex = 0; return re.test(src); });
+const needsPatchOf = (src) => EFFECTIVE.some(([, re]) => { re.lastIndex = 0; return re.test(src); });
 
 let failed = 0;
 for (const [label, root] of roots) {
@@ -188,14 +220,16 @@ for (const [label, root] of roots) {
       const state = needsPatch ? "패치 필요"
         : src.includes("Enter to steer") ? "패치 안 됨 — 패턴 확인 필요"
         : hasBak ? "패치 적용됨" : "패치 불요 (이 빌드에 없음)";
-      console.log(`  ${base} : ${state}${hasBak ? "  (.bak 있음)" : ""}`);
+      const off = RULES.filter(([name, re]) => !EFFECTIVE.some(([n]) => n === name)
+        && (re.lastIndex = 0, re.test(src))).map(([name]) => name);
+      console.log(`  ${base} : ${state}${hasBak ? "  (.bak 있음)" : ""}${off.length ? `  [제외 중: ${off.join(", ")}]` : ""}`);
       continue;
     }
     if (!needsPatch) { console.log(`  ${base} : 이미 패치 상태 — 건너뜀`); continue; }
 
     let out = src;
     const applied = [];
-    for (const [name, re, repl] of RULES) {
+    for (const [name, re, repl] of EFFECTIVE) {
       const n = (out.match(re) || []).length;
       if (!n) continue;
       out = out.replace(re, repl);
@@ -232,6 +266,7 @@ for (const [label, root] of roots) {
 }
 
 if (MODE === "apply") {
+  if (!failed) { try { fs.writeFileSync(STATE, SIG); } catch { /* 없음 */ } }
   console.log(failed ? `\n미완: ${failed}건은 손대지 않았습니다.`
                      : "\n완료. qwen을 재시작하면 footer에서 문구가 사라집니다.");
 }
