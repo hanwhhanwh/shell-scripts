@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const SRC_PATH = fileURLToPath(new URL('../../tamper/auto_check_in_for_mypikpak.js', import.meta.url));
+const LOGIN_HTML_PATH = fileURLToPath(new URL('../../.tmp/tamper/pikpak/login_div.html', import.meta.url));
 const src = readFileSync(SRC_PATH, 'utf8');
 
 // 아래 선택자·id 문자열은 스크립트 안의 상수를 그대로 옮긴 것이다.
@@ -12,6 +13,11 @@ const src = readFileSync(SRC_PATH, 'utf8');
 const CLAIM_BOX = '.claim-now-box';
 const CLAIM_LABEL = '.claim-now-box-label';
 const LOGIN_BUTTON = 'button.sign-up-in';
+const IDENTITY_PANE = '.auth-login-pane';
+const IDENTITY_USERNAME = '.user-info .username';
+const IDENTITY_BUTTON = 'button.pp-button';
+const IDENTITY_TEXT = '신분으로 등록하기';
+const DYNAMIC_NAME = '.dynamic-name';
 const EXTENSION_ID = '__PIKPAK_EXTENSION__';
 const MASK = '.gp-verify-mask';
 const FAIL_DIALOG = '.sign-in-fail-dialog';
@@ -27,15 +33,49 @@ function el({ classes = [], text = '', visible = true, attrs = {}, disabled = fa
 	const node = {
 		_classes: classes,
 		_attrs: attrs,
+		_visible: visible,
 		textContent: text,
 		disabled,
 		clicks: 0,
 		classList: { contains: (c) => node._classes.includes(c) },
 		getAttribute: (k) => (k in node._attrs ? node._attrs[k] : null),
-		getBoundingClientRect: () => (visible ? { width: 88, height: 36 } : { width: 0, height: 0 }),
+		getBoundingClientRect: () => (node._visible ? { width: 88, height: 36 } : { width: 0, height: 0 }),
 		click() { node.clicks++; },
 	};
 	return node;
+}
+
+
+/** 로그인 다이얼로그 가운데의 "OO 신분으로 등록하기" 패널 (login_div.html 구조) */
+function identityPane({
+	username = 'hanwhhanwh',
+	buttonText = null,
+	dynamic = true,
+	paneVisible = true,
+	buttonVisible = true,
+	disabled = false,
+	onClick = null,
+} = {}) {
+	const name = el({ classes: ['username'], text: username });
+	const dynamicName = dynamic ? {} : null;
+	const button = el({
+		classes: ['pp-button'],
+		text: buttonText ?? (dynamic ? `"hanwhh" ${IDENTITY_TEXT}` : IDENTITY_TEXT),
+		visible: buttonVisible,
+		disabled,
+	});
+	button.querySelector = (sel) => (sel === DYNAMIC_NAME ? dynamicName : null);
+	button.click = () => {
+		button.clicks++;
+		if (onClick) onClick(button);
+	};
+	return {
+		button,
+		username: name,
+		querySelector: (sel) => (sel === IDENTITY_USERNAME ? name : null),
+		querySelectorAll: (sel) => (sel === IDENTITY_BUTTON ? [button] : []),
+		getBoundingClientRect: () => (paneVisible ? { width: 360, height: 480 } : { width: 0, height: 0 }),
+	};
 }
 
 /**
@@ -72,11 +112,13 @@ function claimBox({ checkedIn = false, text = ' Check in ', labelText = null, la
 }
 
 /** 출석 체크 페이지의 가짜 document */
-function paneDoc(boxes, { mask = null, failDialog = null, successDialog = null, loginButton = null, extension = true } = {}) {
+function paneDoc(boxes, { mask = null, failDialog = null, successDialog = null, loginButton = null, extension = true, panes = [] } = {}) {
+	const loginPanes = [...panes];
 	return {
 		querySelectorAll: (sel) => {
 			if (sel === CLAIM_BOX) return boxes;
 			if (sel === CLAIM_LABEL) return boxes.map((b) => b.label);
+			if (sel === IDENTITY_PANE) return loginPanes;
 			return [];
 		},
 		querySelector: (sel) => {
@@ -89,6 +131,8 @@ function paneDoc(boxes, { mask = null, failDialog = null, successDialog = null, 
 			}
 		},
 		getElementById: (id) => (id === EXTENSION_ID && extension ? {} : null),
+		openLogin: (next = panes) => { loginPanes.splice(0, loginPanes.length, ...next); },
+		closeLogin: () => { loginPanes.length = 0; },
 	};
 }
 
@@ -167,6 +211,18 @@ test('메타데이터: 빌드마다 바뀌는 Vue scoped 속성(data-v-)에 의�
 	assert.ok(!src.includes('CaPKIKUn'), '번들 파일명에 의존하면 안 된다');
 });
 
+test('실제 로그인 다이얼로그 스냅샷에 자동 로그인 선택자가 모두 있다', (t) => {
+	if (!existsSync(LOGIN_HTML_PATH)) {
+		t.skip('.tmp/tamper/pikpak/login_div.html 이 없어 실데이터 검증은 건너뛴다');
+		return;
+	}
+	const html = readFileSync(LOGIN_HTML_PATH, 'utf8');
+	const tokens = ['id="login-dialog"', 'class="auth-login-pane"', 'class="user-info"', 'class="username"', 'class="pp-button"', 'class="dynamic-name"', IDENTITY_TEXT];
+	for (const token of tokens) {
+		assert.ok(html.includes(token), `${token} 없음 — 구조가 바뀌면 선택자를 함께 고친다`);
+	}
+});
+
 test('출석 전: Check in 버튼을 눌러 출석 완료 상태로 만들고 성공을 보고한다', async () => {
 	const box = claimBox();
 	const { logs, alerts, all } = await run(paneDoc([box]));
@@ -211,14 +267,99 @@ test('출석 완료: no-icon 클래스가 떨어져 나가도 "내일 또 만나
 	assert.deepEqual(alerts, ['이미 출석하였습니다.']);
 });
 
-test('로그인 전: 로그인/가입 버튼이 있으면 출석을 시도하지 않고 로그인을 안내한다', async () => {
+test('로그인 전: 신분 버튼이 없으면 출석을 시도하지 않고 로그인을 안내한다', async () => {
 	// 로그인 전 화면에도 Check in 버튼은 그대로 그려진다 (mypikpak_check_in_not_logined.html)
 	const box = claimBox();
-	const { logs, alerts } = await run(paneDoc([box], { loginButton: loginButtonEl() }));
+	const loginButton = loginButtonEl();
+	const { logs, alerts } = await run(paneDoc([box], { loginButton }));
 
+	assert.equal(loginButton.clicks, 1, '다이얼로그를 열기 위해 로그인/가입 버튼은 눌러야 한다');
 	assert.equal(box.button.clicks, 0, '로그인 전에 Check in을 누르면 로그인 창만 뜬다');
 	assert.deepEqual(alerts, ['로그인 하면 출석체크를 진행합니다.']);
 	assert.ok(logs.log.some((l) => l.includes('로그인/가입')), `무슨 버튼을 보고 판단했는지 남겨야 한다: ${logs.log.join('|')}`);
+	assert.ok(logs.warn.some((l) => l.includes(IDENTITY_TEXT)), `자동 로그인 실패 원인을 남겨야 한다: ${logs.warn.join('|')}`);
+});
+
+/** 헤더 버튼을 누르면 로그인 다이얼로그가 열리고, 신분 버튼을 누르면 로그인이 끝나는 화면을 만든다. */
+function autoLoginDoc({ preopened = false, ...paneOptions } = {}) {
+	const box = claimBox();
+	const loginButton = loginButtonEl();
+	const pane = identityPane(paneOptions);
+	const doc = paneDoc([box], { loginButton, panes: preopened ? [pane] : [] });
+	loginButton.click = () => {
+		loginButton.clicks++;
+		doc.openLogin([pane]);
+	};
+	pane.button.click = () => {
+		pane.button.clicks++;
+		loginButton._visible = false;   // 로그인 성공 — 헤더의 "로그인/가입"이 사라진다
+		doc.closeLogin();
+	};
+	return { box, loginButton, pane, doc };
+}
+
+test('자동 로그인: 다이얼로그가 이미 떠 있으면 헤더 버튼을 다시 누르지 않고 신분 버튼을 누른다', async () => {
+	// 페이지가 스스로 띄워 둔 경우 헤더 버튼을 또 누르면 다이얼로그가 닫힐 수 있다
+	const { box, loginButton, pane, doc } = autoLoginDoc({ preopened: true });
+	const { logs, alerts } = await run(doc);
+
+	assert.equal(loginButton.clicks, 0, '이미 열린 다이얼로그를 건드리면 안 된다');
+	assert.equal(pane.button.clicks, 1);
+	assert.equal(box.button.clicks, 1, '로그인 뒤 출석까지 이어가야 한다');
+	assert.equal(alerts.length, 0, '자동 로그인에 성공했으면 팝업은 필요 없다');
+	assert.ok(logs.log.some((l) => l.includes('로그인 완료')), logs.log.join('|'));
+});
+
+test('자동 로그인: 로그인/가입 버튼으로 다이얼로그를 열고 신분 버튼을 눌러 출석까지 진행한다', async () => {
+	const { box, loginButton, pane, doc } = autoLoginDoc();
+	const { logs, alerts } = await run(doc);
+
+	assert.equal(loginButton.clicks, 1, '다이얼로그를 열려면 헤더 버튼을 눌러야 한다');
+	assert.equal(pane.button.clicks, 1);
+	assert.equal(box.button.clicks, 1, '로그인 뒤 Check in 버튼도 눌러야 한다');
+	assert.equal(alerts.length, 0);
+	assert.ok(logs.log.some((l) => l.includes('로그인 완료')), logs.log.join('|'));
+});
+
+test('자동 로그인: 계정명이 .dynamic-name으로 쪼개져 문구가 달라도 신분 버튼을 누른다', async () => {
+	const { box, pane, doc } = autoLoginDoc({ buttonText: 'Register with this identity' });
+	const { alerts } = await run(doc);
+
+	assert.equal(pane.button.clicks, 1, '다른 언어 화면에서도 구조로 찾아야 한다');
+	assert.equal(box.button.clicks, 1);
+	assert.equal(alerts.length, 0);
+});
+
+test('자동 로그인: 숨겨진 신분 버튼은 누르지 않고 로그인을 안내한다', async () => {
+	const { box, pane, doc } = autoLoginDoc({ preopened: true, buttonVisible: false });
+	const { logs, alerts } = await run(doc);
+
+	assert.equal(pane.button.clicks, 0);
+	assert.equal(box.button.clicks, 0);
+	assert.deepEqual(alerts, ['로그인 하면 출석체크를 진행합니다.']);
+	assert.ok(logs.warn.some((l) => l.includes(IDENTITY_TEXT)), logs.warn.join('|'));
+});
+
+test('자동 로그인: 비활성(disabled) 신분 버튼은 누르지 않는다', async () => {
+	const { box, pane, doc } = autoLoginDoc({ preopened: true, disabled: true });
+	const { alerts } = await run(doc);
+
+	assert.equal(pane.button.clicks, 0);
+	assert.equal(box.button.clicks, 0);
+	assert.deepEqual(alerts, ['로그인 하면 출석체크를 진행합니다.']);
+});
+
+test('자동 로그인: 신분 버튼을 눌러도 로그인이 끝나지 않으면 출석하지 않고 안내한다', async () => {
+	// 예: 추가 본인 인증 창이 떠서 헤더의 "로그인/가입"이 그대로 남은 경우
+	const { box, pane, doc } = autoLoginDoc();
+	pane.button.click = () => { pane.button.clicks++; };   // 다이얼로그만 닫히고 로그인은 안 됨
+
+	const { logs, alerts } = await run(doc);
+
+	assert.equal(pane.button.clicks, 1);
+	assert.equal(box.button.clicks, 0, '로그인 전에 Check in을 누르면 로그인 창만 뜬다');
+	assert.deepEqual(alerts, ['로그인 하면 출석체크를 진행합니다.']);
+	assert.ok(logs.warn.some((l) => l.includes('로그인이 끝나지 않았습니다')), logs.warn.join('|'));
 });
 
 test('로그인 전: 로그인 버튼이 화면에 안 보이면(숨겨짐) 출석을 진행할 수 있다', async () => {
