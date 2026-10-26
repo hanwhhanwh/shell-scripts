@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         auto_check_in_for_mypikpak
 // @namespace    http://hwh.kr/
-// @version      v1.0.1
+// @version      v1.0.2
 // @made         2026-10-10
-// @modified     2026-10-10
-// @description  PikPak 출석 체크 자동화 - 로그인·출석 완료 상태 안내, "프리미엄 획득"의 Check in 버튼 클릭, reCAPTCHA 체크박스 선택, 버튼 소멸로 성공 확인
+// @modified     2026-10-26
+// @description  PikPak 출석 체크 자동화 - "신분으로 등록하기" 자동 로그인, 로그인·출석 완료 상태 안내, "프리미엄 획득"의 Check in 버튼 클릭, reCAPTCHA 체크박스 선택, 버튼 소멸로 성공 확인
 // @author       hbesthee@naver.com
 // @match        https://mypikpak.com/ko/check-in*
 // @match        https://mypikpak.com/*/check-in*
@@ -37,6 +37,15 @@
 	const LOGIN_MESSAGE = '로그인 하면 출석체크를 진행합니다.';
 	const ALREADY_MESSAGE = '이미 출석하였습니다.';
 
+	// 로그인 다이얼로그 (login_div.html 기준)
+	//   .auth-login-pane > .user-info > .username / .contact + button.pp-button("OO 신분으로 등록하기")
+	//   버튼 문구 앞의 계정명은 .dynamic-name 안의 span으로 쪼개져 있어 텍스트만으로는 맞추기 어렵다.
+	const IDENTITY_PANE = '.auth-login-pane';
+	const IDENTITY_USERNAME = '.user-info .username';
+	const IDENTITY_BUTTON = 'button.pp-button';
+	const IDENTITY_TEXT = '신분으로 등록하기';
+	const DYNAMIC_NAME = '.dynamic-name';
+
 	// GoogleVerify가 띄우는 reCAPTCHA v2 — sitekey는 check-in 번들에 하드코딩되어 있다
 	const RECAPTCHA_SITEKEY = '6LerFi0pAAAAAB8PSfeUmwtJx6imhQpza2dCjMmG';
 	const RECAPTCHA_ANCHOR = 'recaptcha-anchor';
@@ -48,6 +57,7 @@
 
 	const POLL_INTERVAL = 500;      // 탐색 주기(ms)
 	const BUTTON_TIMEOUT = 20000;   // Check in 버튼이 그려질 때까지 — SPA라 로그인 확인 뒤에 렌더된다
+	const LOGIN_TIMEOUT = 20000;    // 로그인 다이얼로그가 뜨고 로그인이 끝날 때까지 — 추가 인증이 뜨면 손으로 풀어야 한다
 	const RESULT_TIMEOUT = 120000;  // reCAPTCHA 통과까지 — 이미지 챌린지는 손으로 풀어야 하므로 넉넉히
 	const CAPTCHA_RETRY = 3;        // 체크박스 클릭 재시도 횟수
 	const CLICK_SETTLE = 1000;      // 체크박스 클릭 후 상태가 반영되기를 기다리는 시간(ms)
@@ -152,6 +162,67 @@
 
 
 	/**
+	 * 로그인 다이얼로그 가운데의 "OO 신분으로 등록하기" 버튼을 찾습니다.
+	 * 계정명은 .dynamic-name 안에서 span으로 쪼개져 있으므로 문구가 아니라 패널 구조로 찾는다.
+	 * @returns {HTMLElement} 자동 로그인 버튼, 다이얼로그가 없거나 아직 그려지지 않았으면 null
+	 */
+	function findIdentityLoginButton() {
+		for (const pane of document.querySelectorAll(IDENTITY_PANE)) {
+			if (!isVisible(pane) || !pane.querySelector(IDENTITY_USERNAME)) {
+				continue;
+			}
+			for (const button of pane.querySelectorAll(IDENTITY_BUTTON)) {
+				if (button.disabled === true || button.getAttribute('aria-disabled') === 'true') {
+					continue;
+				}
+				if (!isVisible(button)) {
+					continue;
+				}
+				// 다른 언어 화면에서는 문구가 바뀌므로 계정명을 감싼 .dynamic-name도 함께 본다
+				if (!button.querySelector(DYNAMIC_NAME) && !button.textContent.includes(IDENTITY_TEXT)) {
+					continue;
+				}
+				return button;
+			}
+		}
+		return null;
+	}
+
+
+	/**
+	 * "로그인/가입" 버튼으로 다이얼로그를 열고, 감지된 신분으로 로그인합니다.
+	 * 페이지가 다이얼로그를 이미 띄워 둔 경우에는 헤더 버튼을 누르지 않는다.
+	 * @param {HTMLElement} loginButton - 헤더의 "로그인/가입" 버튼
+	 * @returns {Promise<boolean>} 헤더 버튼이 사라질 만큼 로그인이 끝나면 true
+	 */
+	async function autoLogin(loginButton) {
+		let identityButton = findIdentityLoginButton();
+		if (!identityButton) {
+			console.log(LOG, '로그인/가입 버튼 클릭 — 로그인 다이얼로그를 엽니다.');
+			if (loginButton) {
+				loginButton.click();
+			}
+			identityButton = await waitFor(findIdentityLoginButton, LOGIN_TIMEOUT);
+		}
+		if (!identityButton) {
+			console.warn(LOG, `자동 로그인 버튼("${IDENTITY_TEXT}")을 찾지 못했습니다.`);
+			return false;
+		}
+
+		console.log(LOG, `자동 로그인 버튼 클릭: "${identityButton.textContent.trim()}"`);
+		identityButton.click();
+
+		const finished = await waitFor(() => !findLoginButton(), LOGIN_TIMEOUT);
+		if (!finished) {
+			console.warn(LOG, '로그인이 끝나지 않았습니다 — 추가 인증이 필요할 수 있습니다.');
+			return false;
+		}
+		console.log(LOG, '로그인 완료 — 출석을 이어갑니다.');
+		return true;
+	}
+
+
+	/**
 	 * 버튼이 있어야 할 자리에 대신 그려진 "출석 완료" 라벨을 찾습니다.
 	 * 문구는 언어마다 바뀌므로 no-icon 클래스를 기준으로 삼고, "내일 또 만나요" 문구는 보조 신호로 본다.
 	 * @returns {HTMLElement} 출석 완료 라벨, 아직 출석할 수 있으면 null
@@ -231,15 +302,28 @@
 			console.warn(LOG, `확장 표식(#${EXTENSION_MARKER})이 없습니다 — 확장 설치 안내만 뜨고 출석은 거부될 수 있습니다.`);
 		}
 
-		const found = await waitFor(detectState, BUTTON_TIMEOUT);
+		let found = await waitFor(detectState, BUTTON_TIMEOUT);
 		if (!found) {
 			console.log(LOG, '출석 영역이 그려지지 않았습니다.', describeState());
 			return false;
 		}
 		if (found.state === 'login') {
 			console.log(LOG, `로그인되지 않았습니다 — "${found.text}" 버튼이 보입니다.`);
-			alert(LOGIN_MESSAGE);
-			return false;
+			const loggedIn = await autoLogin(findLoginButton());
+			if (!loggedIn) {
+				alert(LOGIN_MESSAGE);
+				return false;
+			}
+			// 로그인이 끝나면 SPA가 출석 영역을 다시 그린다 — 같은 자리의 Check in 버튼을 다시 찾는다
+			found = await waitFor(() => {
+				const state = detectState();
+				return state && state.state !== 'login' ? state : null;
+			}, BUTTON_TIMEOUT);
+			if (!found) {
+				console.log(LOG, '로그인 뒤 출석 영역 상태를 확인하지 못했습니다.', describeState());
+				alert(LOGIN_MESSAGE);
+				return false;
+			}
 		}
 		if (found.state === 'done') {
 			console.log(LOG, `이미 출석했습니다 — 버튼 자리에 "${found.text}"`);
