@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         daum_attachment_generator
 // @namespace    http://hwh.kr/
-// @version      v1.1.12
+// @version      v1.1.13
 // @date         2025-08-13
-// @modified     2026-10-16
+// @modified     2026-11-25
 // @description  야문 다음 첨부파일 다운로드용 스크립트 생성기
 // @author       hbesthee@naver.com
 // @match        https://*/newboard/*
@@ -27,12 +27,13 @@
 
 	/**
 	 * 파일명에서 패턴과 확장자를 추출하여 새로운 파일명을 생성합니다.
-	 * 파일명에 "Reducing_Mosaic"가 포함되어 있으면 -HU를 추가합니다.
+	 * 패턴(ID)은 대소문자 구분 없이 찾고 대문자로 바꿉니다.
+	 * 파일명에 "Reducing_Mosaic" 또는 공백/./-/_/[/( 뒤의 "uncen"이 있으면 -HU를 추가합니다.
 	 * @param {string} filename - 원본 파일명
 	 * @returns {string} 수정된 파일명
 	 */
 	function createModifiedFilename(filename) {
-		const pattern = /^([0-9,A-Z]{3,6}-\d{2,5})/;
+		const pattern = /^([0-9,A-Z]{3,6}-\d{2,5})/i;
 		const filenameMatch = filename.match(pattern);
 
 		// 패턴에 일치하는 부분이 없으면 원본 파일명 반환
@@ -46,7 +47,7 @@
 
 		let newFilename = baseName.toUpperCase();
 
-		if (filename.includes("Reducing_Mosaic") || filename.includes(".uncen")) {
+		if (filename.includes("Reducing_Mosaic") || /[\s._\-[(]uncen/i.test(filename)) {
 			newFilename += "-HU";
 		}
 		if ( filename.includes(".korsub") ) {

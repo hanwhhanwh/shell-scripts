@@ -171,3 +171,20 @@ test('createDaumDownloadArgs: 접두사가 DAUM_BASE가 아닌 URL은 원문 그
 
 	assert.equal(loadFn('createDaumDownloadArgs')('ADN-532.mp4', url), ` -o "ADN-532.mp4" "${url}"`);
 });
+
+test('createModifiedFilename: 소문자 ID도 찾아 대문자로 바꾼다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	assert.equal(fn('adn-532.mp4'), 'ADN-532.mp4');
+	assert.equal(fn('Juq-342.korsub.mp4'), 'JUQ-342-S.mp4');
+	assert.equal(fn('무관한파일.mp4'), null);
+});
+
+test('createModifiedFilename: 공백/./-/_ 등 뒤의 uncen이면 -HU를 붙인다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	for (const f of ['JUQ-342.uncen.mp4', 'JUQ-342 uncen.mp4', 'JUQ-342-uncen.mp4', 'JUQ-342_UNCEN.mp4', 'JUQ-342[uncen].mp4']) {
+		assert.equal(fn(f), 'JUQ-342-HU.mp4', f);
+	}
+	assert.equal(fn('JUQ-342uncen.mp4'), 'JUQ-342.mp4');
+});
