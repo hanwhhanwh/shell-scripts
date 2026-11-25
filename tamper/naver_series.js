@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
-// @version      v1.3.0
+// @version      v1.3.1
 // @date         2025-11-18
 // @description  첨부 파일의 네이버 시리즈 점수 + Everything HTTP 로컬 존재 여부 확인 통합
 // @author       hbesthee@naver.com
@@ -24,7 +24,7 @@
 		.ev-popup {
 			position: fixed; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
 			font-size: 12px; line-height: 1.4; z-index: 99999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
-			max-height: 350px; max-width: 450px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
+			max-height: 350px; max-width: 450px; overflow: hidden; white-space: normal; border-radius: 4px;
 			display: none; pointer-events: none; word-break: break-all; transition: none;
 		}
 		.ev-popup strong { color:  #222; display: block; margin-bottom: 4px; }
