@@ -200,3 +200,12 @@ test('createModifiedFilename: 구분자 뒤 LTX면 U를 빼고 -*X 하나로 붙
 	assert.equal(fn('JUQ-342.uncen.korsub.mp4'), 'JUQ-342-HU-S.mp4');
 	assert.equal(fn('JUQ-342LTX.mp4'), 'JUQ-342.mp4');
 });
+
+test('createDaumDownloadArgs: .ts 확장자도 .mp4 로 바꾼다', () => {
+	const fn = loadFn('createDaumDownloadArgs');
+	const saved = (f) => fn(f, 'x').match(/^ -o "([^"]*)"/)[1];
+
+	assert.equal(saved('ADN-532.ts'), 'ADN-532.mp4');
+	assert.equal(saved('ADN-532-HX.TS'), 'ADN-532-HX.mp4');
+	assert.equal(saved('ADN-532.tsx'), 'ADN-532.tsx');
+});

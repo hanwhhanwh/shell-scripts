@@ -71,13 +71,13 @@
 
 	/**
 	 * 다음(daum) 첨부파일 1건에 대한 curl 파일 지정 인수 문자열을 생성합니다.
-	 * 저장 파일명의 확장자가 .mkv 이면 .mp4 로 바꿉니다.
+	 * 저장 파일명의 확장자가 .mkv 또는 .ts 이면 .mp4 로 바꿉니다.
 	 * @param {string} filename - 저장할 파일명
 	 * @param {string} url - 첨부파일 URL
 	 * @returns {string} curl 명령어 뒤에 이어 붙이는 인수 문자열 (앞쪽 공백 포함)
 	 */
 	function createDaumDownloadArgs(filename, url) {
-		const savedFilename = filename.replace(/\.mkv$/i, '.mp4');
+		const savedFilename = filename.replace(/\.(mkv|ts)$/i, '.mp4');
 		return ` -o "${savedFilename}" "${url.replace(DAUM_BASE, '\${DAUM_BASE}')}"`;
 	}
 
