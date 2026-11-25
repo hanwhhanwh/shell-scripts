@@ -188,3 +188,15 @@ test('createModifiedFilename: 공백/./-/_ 등 뒤의 uncen이면 -HU를 붙인�
 	}
 	assert.equal(fn('JUQ-342uncen.mp4'), 'JUQ-342.mp4');
 });
+
+test('createModifiedFilename: 구분자 뒤 LTX면 U를 빼고 -*X 하나로 붙인다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	assert.equal(fn('JUQ-342 LTX.mp4'), 'JUQ-342-X.mp4');
+	assert.equal(fn('JUQ-342.uncen-LTX.mp4'), 'JUQ-342-HX.mp4');
+	assert.equal(fn('JUQ-342_ltx.Reducing_Mosaic.mp4'), 'JUQ-342-HX.mp4');
+	assert.equal(fn('JUQ-342-LTX.korsub.mp4'), 'JUQ-342-SX.mp4');
+	assert.equal(fn('JUQ-342.uncen.LTX.korsub.mp4'), 'JUQ-342-HSX.mp4');
+	assert.equal(fn('JUQ-342.uncen.korsub.mp4'), 'JUQ-342-HU-S.mp4');
+	assert.equal(fn('JUQ-342LTX.mp4'), 'JUQ-342.mp4');
+});

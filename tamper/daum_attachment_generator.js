@@ -29,6 +29,7 @@
 	 * 파일명에서 패턴과 확장자를 추출하여 새로운 파일명을 생성합니다.
 	 * 패턴(ID)은 대소문자 구분 없이 찾고 대문자로 바꿉니다.
 	 * 파일명에 "Reducing_Mosaic" 또는 공백/./-/_/[/( 뒤의 "uncen"이 있으면 -HU를 추가합니다.
+	 * 공백/./-/_/[/( 뒤에 "LTX"가 있으면 U를 빼고 -*X(예: -HX, -SX)를 추가합니다.
 	 * @param {string} filename - 원본 파일명
 	 * @returns {string} 수정된 파일명
 	 */
@@ -46,12 +47,19 @@
 		const extension = extensionMatch ? `.${extensionMatch[1]}` : '';
 
 		let newFilename = baseName.toUpperCase();
+		const isUncen = filename.includes("Reducing_Mosaic") || /[\s._\-[(]uncen/i.test(filename);
+		const isKorsub = filename.includes(".korsub");
 
-		if (filename.includes("Reducing_Mosaic") || /[\s._\-[(]uncen/i.test(filename)) {
-			newFilename += "-HU";
-		}
-		if ( filename.includes(".korsub") ) {
-			newFilename += "-S";
+		if (/[\s._\-[(]LTX/i.test(filename)) {
+			// LTX: U는 빼고 하나의 -*X 접미사로 붙인다 (예: -HX, -SX, -HSX, -X)
+			newFilename += `-${isUncen ? 'H' : ''}${isKorsub ? 'S' : ''}X`;
+		} else {
+			if (isUncen) {
+				newFilename += "-HU";
+			}
+			if (isKorsub) {
+				newFilename += "-S";
+			}
 		}
 
 		// 최종 파일명에 확장자 추가
