@@ -171,3 +171,41 @@ test('createDaumDownloadArgs: 접두사가 DAUM_BASE가 아닌 URL은 원문 그
 
 	assert.equal(loadFn('createDaumDownloadArgs')('ADN-532.mp4', url), ` -o "ADN-532.mp4" "${url}"`);
 });
+
+test('createModifiedFilename: 소문자 ID도 찾아 대문자로 바꾼다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	assert.equal(fn('adn-532.mp4'), 'ADN-532.mp4');
+	assert.equal(fn('Juq-342.korsub.mp4'), 'JUQ-342-S.mp4');
+	assert.equal(fn('무관한파일.mp4'), null);
+});
+
+test('createModifiedFilename: 공백/./-/_ 등 뒤의 uncen이면 -HU를 붙인다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	for (const f of ['JUQ-342.uncen.mp4', 'JUQ-342 uncen.mp4', 'JUQ-342-uncen.mp4', 'JUQ-342_UNCEN.mp4', 'JUQ-342[uncen].mp4']) {
+		assert.equal(fn(f), 'JUQ-342-HU.mp4', f);
+	}
+	assert.equal(fn('JUQ-342uncen.mp4'), 'JUQ-342.mp4');
+});
+
+test('createModifiedFilename: 구분자 뒤 LTX면 U를 빼고 -*X 하나로 붙인다', () => {
+	const fn = loadFn('createModifiedFilename');
+
+	assert.equal(fn('JUQ-342 LTX.mp4'), 'JUQ-342-X.mp4');
+	assert.equal(fn('JUQ-342.uncen-LTX.mp4'), 'JUQ-342-HX.mp4');
+	assert.equal(fn('JUQ-342_ltx.Reducing_Mosaic.mp4'), 'JUQ-342-HX.mp4');
+	assert.equal(fn('JUQ-342-LTX.korsub.mp4'), 'JUQ-342-SX.mp4');
+	assert.equal(fn('JUQ-342.uncen.LTX.korsub.mp4'), 'JUQ-342-HSX.mp4');
+	assert.equal(fn('JUQ-342.uncen.korsub.mp4'), 'JUQ-342-HU-S.mp4');
+	assert.equal(fn('JUQ-342LTX.mp4'), 'JUQ-342.mp4');
+});
+
+test('createDaumDownloadArgs: .ts 확장자도 .mp4 로 바꾼다', () => {
+	const fn = loadFn('createDaumDownloadArgs');
+	const saved = (f) => fn(f, 'x').match(/^ -o "([^"]*)"/)[1];
+
+	assert.equal(saved('ADN-532.ts'), 'ADN-532.mp4');
+	assert.equal(saved('ADN-532-HX.TS'), 'ADN-532-HX.mp4');
+	assert.equal(saved('ADN-532.tsx'), 'ADN-532.tsx');
+});

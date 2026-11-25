@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
-// @version      v1.2.0
+// @version      v1.3.1
 // @date         2025-11-18
 // @description  첨부 파일의 네이버 시리즈 점수 + Everything HTTP 로컬 존재 여부 확인 통합
 // @author       hbesthee@naver.com
@@ -24,7 +24,7 @@
 		.ev-popup {
 			position: fixed; background:  #fff; border: 1px solid  #aaa; padding: 8px 10px;
 			font-size: 12px; line-height: 1.4; z-index: 99999; box-shadow: 0 3px 6px  rgba(0,0,0,0.2);
-			max-height: 350px; max-width: 450px; overflow-y: auto; white-space: pre-wrap; border-radius: 4px;
+			max-height: 350px; max-width: 450px; overflow: hidden; white-space: normal; border-radius: 4px;
 			display: none; pointer-events: none; word-break: break-all; transition: none;
 		}
 		.ev-popup strong { color:  #222; display: block; margin-bottom: 4px; }
@@ -89,37 +89,38 @@
 	}
 
 
-	/** Everything HTML 파서 */
+	/** Everything JSON(json=1) 파서 */
 	class EverythingParser {
-		static parse(html) {
-			const parser = new DOMParser();
-			const doc = parser.parseFromString(html, 'text/html');
-			const results = [];
-			const rows = doc.querySelectorAll('tr');
-			rows.forEach(row => {
-				const cells = row.querySelectorAll('td');
-				if (cells.length >= 4) {
-					const name = cells[0].textContent.trim();
-					const path = cells[1].textContent.trim(); // 📂 파일 경로 추출
-					const size = cells[2].textContent.trim();
-					const date = cells[3].textContent.trim();
-					// 헤더 및 비정상 행 필터링
-					if (name && name !== '이름' && name !== 'Name' && !name.includes('Everything')) {
-						results.push({ name, path, size, date });
-					}
-				}
-			});
-			// 테이블 구조가 아닐 경우 Fallback
-			if (results.length === 0) {
-				doc.querySelectorAll('a').forEach(link => {
-					const href = link.getAttribute('href') || '';
-					const text = link.textContent.trim();
-					if (text && !href.includes('search=')) {
-						results.push({ name: text, path: '-', size: '-', date: '-' });
-					}
-				});
+		static parse(text) {
+			let data;
+			try {
+				data = JSON.parse(text);
+			} catch (e) {
+				console.error('Everything JSON 파싱 실패:', e);
+				return [];
 			}
-			return results;
+			return (data.results || []).map(r => ({
+				name: r.name || '',
+				path: r.path || '-',
+				size: EverythingParser.formatSize(r.size),
+				date: EverythingParser.formatFileTime(r.date_modified),
+			}));
+		}
+
+
+		/** 바이트 크기 → "1,234 KB" (값이 없으면 '-') */
+		static formatSize(size) {
+			if (size === undefined || size === null || size === '') return '-';
+			return `${Math.ceil(Number(size) / 1024).toLocaleString('en-US')} KB`;
+		}
+
+
+		/** Windows FILETIME(1601-01-01부터 100ns 단위) → "YYYY-MM-DD HH:mm" (값이 없으면 '-') */
+		static formatFileTime(fileTime) {
+			if (!fileTime) return '-';
+			const d = new Date(Number(fileTime) / 10000 - 11644473600000);
+			const p = (n) => String(n).padStart(2, '0');
+			return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 		}
 	}
 
@@ -167,7 +168,7 @@
 
 
 		searchEverything(keyword, callback) {
-			const url = `http://localhost:3808/?search=${encodeURIComponent(keyword)}`;
+			const url = `http://localhost:3808/?search=${encodeURIComponent(keyword)}&json=1&path_column=1&size_column=1&date_modified_column=1`;
 			const gmXHR = (typeof GM !== 'undefined' && GM.xmlHttpRequest) ? GM.xmlHttpRequest : GM_xmlhttpRequest;
 			gmXHR({
 				method: 'GET', url: url,

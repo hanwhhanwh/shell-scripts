@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         naver_series_mapper
 // @namespace    http://hwh.kr/
-// @version      v1.2.0
+// @version      v1.3.0
 // @date         2025-11-18
 // @description  첨부된 소설의 점수를 네이버 시리즈에서 검색하여 표시하고, 로컬 Everything에서 파일 존재 여부를 확인하는 스크립트
 // @author       hbesthee@naver.com
@@ -25,6 +25,9 @@
 	/** Everything HTTP 서버 기본 URL */
 	const EVERYTHING_BASE_URL = 'http://localhost:3808/';
 
+	/** Everything HTTP JSON 응답 요청 파라미터 (경로·크기·수정 날짜 컬럼 포함) */
+	const EVERYTHING_JSON_PARAMS = '&json=1&path_column=1&size_column=1&date_modified_column=1';
+
 	/** 품번 패턴 (예: ABC-12345, 12345-678) */
 	const PRODUCT_CODE_PATTERN = /^([0-9,A-Z]{3,6}-\d{2,5})/;
 
@@ -33,70 +36,59 @@
 
 	// ─── Everything HTTP 파서 ────────────────────────────────────────────────────
 
-	// Everything HTTP 검색 결과를 파싱하는 클래스
+	// Everything HTTP 검색 결과(json=1)를 파싱하는 클래스
 	class EverythingParser {
 		/**
-		 * Everything HTTP 검색 결과 HTML에서 파일 목록을 추출합니다.
+		 * Everything HTTP 검색 결과 JSON에서 파일 목록을 추출합니다.
 		 *
-		 * @param {string} html - Everything 검색 결과 HTML 문자열
+		 * @param {string} text - Everything 검색 결과 JSON 문자열
 		 * @returns {Array<{name: string, path: string, size: string, modified: string}>} 파일 정보 배열
 		 */
-		static parseSearchResults(html) {
-			const parser = new DOMParser();
-			const doc = parser.parseFromString(html, 'text/html');
-
-			// 결과 없음: numresults 텍스트로 판별
-			const numResultsEl = doc.querySelector('p.numresults');
-			if (!numResultsEl) {
+		static parseSearchResults(text) {
+			let data;
+			try {
+				data = JSON.parse(text);
+			} catch (e) {
+				console.error('Everything JSON 파싱 실패:', e);
 				return [];
 			}
 
-			const numText = numResultsEl.textContent.trim();
-			// "0개 결과" 또는 결과 없음인 경우
-			if (numText.startsWith('0')) {
-				return [];
+			return (data.results || []).map(r => ({
+				name: r.name || '',
+				path: r.path || '',
+				size: EverythingParser.formatSize(r.size),
+				modified: EverythingParser.formatFileTime(r.date_modified),
+			}));
+		}
+
+
+		/**
+		 * 바이트 크기를 KB 단위 문자열로 변환합니다 (Everything 화면 표기와 동일).
+		 *
+		 * @param {string|number|undefined} size - 바이트 크기
+		 * @returns {string} 예: "1,234 KB" (값이 없으면 '')
+		 */
+		static formatSize(size) {
+			if (size === undefined || size === null || size === '') {
+				return '';
 			}
+			return `${Math.ceil(Number(size) / 1024).toLocaleString('en-US')} KB`;
+		}
 
-			const results = [];
 
-			// trdata1, trdata2, ... 행 순회
-			const rows = doc.querySelectorAll('tr[class^="trdata"]');
-
-			for (const row of rows) {
-				// 파일명: td.file > span.nobr > nobr (img 이후 텍스트)
-				const fileCell = row.querySelector('td.file nobr');
-				if (!fileCell) {
-					continue;
-				}
-
-				// img 태그를 제외한 텍스트만 추출
-				let name = '';
-				for (const node of fileCell.childNodes) {
-					if (node.nodeType === Node.TEXT_NODE) {
-						name += node.textContent;
-					}
-				}
-				name = name.trim();
-				if (!name) {
-					continue;
-				}
-
-				// 경로: td.pathdata a
-				const pathEl = row.querySelector('td.pathdata a');
-				const path = pathEl ? pathEl.textContent.trim() : '';
-
-				// 크기: td.sizedata
-				const sizeEl = row.querySelector('td.sizedata');
-				const size = sizeEl ? sizeEl.textContent.trim() : '';
-
-				// 수정 날짜: td.modifieddata
-				const modifiedEl = row.querySelector('td.modifieddata');
-				const modified = modifiedEl ? modifiedEl.textContent.trim() : '';
-
-				results.push({ name, path, size, modified });
+		/**
+		 * Windows FILETIME(1601-01-01부터 100ns 단위)을 "YYYY-MM-DD HH:mm"으로 변환합니다.
+		 *
+		 * @param {string|number|undefined} fileTime - FILETIME 값
+		 * @returns {string} 로컬 시각 문자열 (값이 없으면 '')
+		 */
+		static formatFileTime(fileTime) {
+			if (!fileTime) {
+				return '';
 			}
-
-			return results;
+			const d = new Date(Number(fileTime) / 10000 - 11644473600000);
+			const p = (n) => String(n).padStart(2, '0');
+			return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 		}
 	}
 
@@ -225,7 +217,7 @@
 		 * @returns {string} Everything HTTP 검색 URL
 		 */
 		static createEverythingSearchUrl(keyword) {
-			return `${EVERYTHING_BASE_URL}?search=${encodeURIComponent(keyword)}`;
+			return `${EVERYTHING_BASE_URL}?search=${encodeURIComponent(keyword)}${EVERYTHING_JSON_PARAMS}`;
 		}
 	}
 
@@ -427,7 +419,7 @@
 		searchEverything(url, callback) {
 			this._gmGet(
 				url,
-				(html) => callback(EverythingParser.parseSearchResults(html)),
+				(text) => callback(EverythingParser.parseSearchResults(text)),
 				() => callback([])
 			);
 		}
